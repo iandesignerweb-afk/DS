@@ -1,0 +1,7 @@
+{
+  "name": "DUAL SYSTEM",
+  "description": "Sistema de gestão e controle para assistência técnica de celulares e eletrônicos",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
