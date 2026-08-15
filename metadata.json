@@ -1,6 +1,6 @@
 {
   "name": "DUAL SYSTEM",
-  "description": "Sistema de gestão e controle para assistência técnica de celulares e eletrônicos",
+  "description": "Sistema completo para assistência técnica de celulares com controle de OS (análise de placa, aguardando peças/retirada, pronto), gestão de marcas e modelos, PDV com menu oculto (produtos, OS, sangria, suprimento), comissões de vendedores, financeiro e controle de permissões por perfil (Admin vs Demais).",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

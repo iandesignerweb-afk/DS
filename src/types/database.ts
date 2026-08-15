@@ -102,11 +102,13 @@ export interface Database {
           email: string | null;
           address: string | null;
           number: string | null;
+          complement: string | null;
           neighborhood: string | null;
           city: string | null;
           state: string | null;
           zip_code: string | null;
           notes: string | null;
+          is_active: boolean;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -120,11 +122,13 @@ export interface Database {
           email?: string | null;
           address?: string | null;
           number?: string | null;
+          complement?: string | null;
           neighborhood?: string | null;
           city?: string | null;
           state?: string | null;
           zip_code?: string | null;
           notes?: string | null;
+          is_active?: boolean;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -138,11 +142,13 @@ export interface Database {
           email?: string | null;
           address?: string | null;
           number?: string | null;
+          complement?: string | null;
           neighborhood?: string | null;
           city?: string | null;
           state?: string | null;
           zip_code?: string | null;
           notes?: string | null;
+          is_active?: boolean;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -174,6 +180,7 @@ export interface Database {
           brand_id: string;
           name: string;
           model_number: string | null;
+          is_active: boolean;
           created_at: string;
         };
         Insert: {
@@ -181,6 +188,7 @@ export interface Database {
           brand_id: string;
           name: string;
           model_number?: string | null;
+          is_active?: boolean;
           created_at?: string;
         };
         Update: {
@@ -188,6 +196,7 @@ export interface Database {
           brand_id?: string;
           name?: string;
           model_number?: string | null;
+          is_active?: boolean;
           created_at?: string;
         };
       };
