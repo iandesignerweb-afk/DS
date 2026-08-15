@@ -19,6 +19,10 @@ import {
   Moon,
   Sparkles,
   AlertCircle,
+  LogOut,
+  Lock,
+  Award,
+  ArrowRight,
 } from 'lucide-react';
 import {
   UserRole,
@@ -33,6 +37,7 @@ import {
   Sale,
   STATUS_CONFIG,
 } from './types';
+import { LoginView, TEST_USERS } from './components/auth/LoginView';
 import { DashboardModule } from './components/dashboard/DashboardModule';
 import { PosModule } from './components/pos/PosModule';
 import { ServiceOrdersModule } from './components/service-orders/ServiceOrdersModule';
@@ -55,8 +60,12 @@ type NavTab =
   | 'FINANCIAL';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>('DASHBOARD');
+  // Authentication & Current User State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<UserType>(TEST_USERS.ADMIN);
   const [userRole, setUserRole] = useState<UserRole>('ADMIN');
+
+  const [activeTab, setActiveTab] = useState<NavTab>('DASHBOARD');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
@@ -131,7 +140,7 @@ export function App() {
       }
       if (ordersRes.ok) {
         const d = await ordersRes.json();
-        setOrders(d.orders || []);
+        setOrders(d.orders || d.serviceOrders || []);
       }
       if (salesRes.ok) {
         const d = await salesRes.json();
@@ -155,44 +164,102 @@ export function App() {
     }
   }, [isDarkMode]);
 
+  const handleLogin = (user: UserType) => {
+    setCurrentUser(user);
+    setUserRole(user.role);
+    setIsAuthenticated(true);
+    setActiveTab('DASHBOARD');
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+  };
+
+  const handleSwitchRole = (role: UserRole) => {
+    setUserRole(role);
+    const targetUser = TEST_USERS[role] || TEST_USERS.ADMIN;
+    setCurrentUser(targetUser);
+    // If on a restricted tab, reset to Dashboard
+    if ((role === 'SELLER' || role === 'TECHNICIAN') && (activeTab === 'SUPPLIERS' || activeTab === 'FINANCIAL')) {
+      setActiveTab('DASHBOARD');
+    }
+  };
+
   const handleOpenNewOS = () => {
     setActiveTab('ORDERS');
     setIsCreateOSModalOpen(true);
   };
 
-  const navItems = [
-    { id: 'DASHBOARD' as NavTab, label: 'Painel Geral', icon: LayoutDashboard },
+  // If user is not authenticated, show Login View
+  if (!isAuthenticated) {
+    return <LoginView onLogin={handleLogin} availableUsers={users} />;
+  }
+
+  // Determine navigation items visible per role
+  const allNavItems = [
+    {
+      id: 'DASHBOARD' as NavTab,
+      label: userRole === 'SELLER' ? 'Painel do Vendedor' : userRole === 'TECHNICIAN' ? 'Painel do Laboratório' : 'Painel Geral',
+      icon: LayoutDashboard,
+      roles: ['ADMIN', 'SELLER', 'TECHNICIAN', 'CASHIER'],
+    },
     {
       id: 'POS' as NavTab,
       label: 'PDV Balcão & Caixa',
       icon: ShoppingCart,
       badge: 'Vendas',
       badgeColor: 'bg-emerald-500 text-white',
+      roles: ['ADMIN', 'SELLER', 'CASHIER'],
     },
     {
       id: 'ORDERS' as NavTab,
-      label: 'Ordens de Serviço (OS)',
+      label: userRole === 'TECHNICIAN' ? 'Bancada & Reparos (OS)' : 'Ordens de Serviço (OS)',
       icon: Wrench,
       badge: `${orders.filter((o) => o.status !== 'DELIVERED').length}`,
       badgeColor: 'bg-indigo-600 text-white',
+      roles: ['ADMIN', 'SELLER', 'TECHNICIAN', 'CASHIER'],
     },
-    { id: 'BRANDS_MODELS' as NavTab, label: 'Marcas & Modelos', icon: Smartphone },
-    { id: 'CLIENTS' as NavTab, label: 'Clientes', icon: Users },
-    { id: 'PRODUCTS' as NavTab, label: 'Produtos & Peças', icon: Package },
-    { id: 'SERVICES' as NavTab, label: 'Serviços de Bancada', icon: Layers },
+    {
+      id: 'BRANDS_MODELS' as NavTab,
+      label: 'Marcas & Modelos',
+      icon: Smartphone,
+      roles: ['ADMIN', 'TECHNICIAN'],
+    },
+    {
+      id: 'CLIENTS' as NavTab,
+      label: 'Clientes & WhatsApp',
+      icon: Users,
+      roles: ['ADMIN', 'SELLER', 'CASHIER'],
+    },
+    {
+      id: 'PRODUCTS' as NavTab,
+      label: userRole === 'TECHNICIAN' ? 'Estoque de Peças' : 'Produtos & Peças',
+      icon: Package,
+      roles: ['ADMIN', 'SELLER', 'TECHNICIAN', 'CASHIER'],
+    },
+    {
+      id: 'SERVICES' as NavTab,
+      label: 'Serviços de Bancada',
+      icon: Layers,
+      roles: ['ADMIN', 'TECHNICIAN'],
+    },
     {
       id: 'SUPPLIERS' as NavTab,
       label: 'Fornecedores',
       icon: Truck,
       adminOnly: true,
+      roles: ['ADMIN'],
     },
     {
       id: 'FINANCIAL' as NavTab,
       label: 'Financeiro & Comissões',
       icon: DollarSign,
       adminOnly: true,
+      roles: ['ADMIN'],
     },
   ];
+
+  const visibleNavItems = allNavItems.filter((item) => item.roles.includes(userRole));
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
@@ -226,46 +293,34 @@ export function App() {
             </div>
           </div>
 
-          {/* Center / Right: ROLE SELECTOR PILL & THEME TOGGLE */}
-          <div className="flex items-center gap-3">
-            {/* Role Switcher Pill */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-              <span className="hidden sm:inline-block px-2.5 py-1 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Perfil de Acesso:
-              </span>
-              <button
-                onClick={() => setUserRole('ADMIN')}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all ${
-                  userRole === 'ADMIN'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-                }`}
-                title="Acesso completo ao financeiro, custos e fornecedores"
-              >
-                👑 Admin
-              </button>
-              <button
-                onClick={() => setUserRole('SELLER')}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all ${
-                  userRole === 'SELLER'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-                }`}
-                title="Acesso a vendas, comissões, OS e produtos (sem custos ou financeiro)"
-              >
-                💼 Vendedor
-              </button>
-              <button
-                onClick={() => setUserRole('TECHNICIAN')}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all ${
-                  userRole === 'TECHNICIAN'
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-                }`}
-                title="Acesso a OS e bancada técnica"
-              >
-                🔧 Técnico
-              </button>
+          {/* Center / Right: LOGGED USER PROFILE BADGE, THEME TOGGLE & LOGOUT */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Current Logged User Profile Pill */}
+            <div className="flex items-center gap-2.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="w-7 h-7 rounded-full overflow-hidden bg-indigo-200 dark:bg-indigo-900 flex items-center justify-center text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                {currentUser?.avatar ? (
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.name}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  currentUser?.name?.charAt(0) || 'U'
+                )}
+              </div>
+              <div className="text-left">
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight">
+                  {currentUser.name}
+                </span>
+                <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 block leading-none">
+                  {userRole === 'ADMIN'
+                    ? '👑 Administrador'
+                    : userRole === 'SELLER'
+                    ? '💼 Vendedor(a)'
+                    : '🔧 Técnico de Bancada'}
+                </span>
+              </div>
             </div>
 
             {/* Dark mode toggle */}
@@ -276,6 +331,17 @@ export function App() {
             >
               {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
             </button>
+
+            {/* Logout Button */}
+            <button
+              id="btn-logout"
+              onClick={handleLogout}
+              className="px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/60 transition-colors flex items-center gap-1.5 text-xs font-bold shadow-sm"
+              title="Encerrar sessão e voltar à tela de login"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sair</span>
+            </button>
           </div>
         </div>
       </header>
@@ -284,19 +350,18 @@ export function App() {
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 flex-1 flex flex-col lg:flex-row gap-6">
         {/* Left Navigation Sidebar */}
         <aside
-          className={`lg:w-64 shrink-0 space-y-1.5 ${
+          className={`lg:w-64 shrink-0 space-y-3 ${
             isMobileMenuOpen ? 'block' : 'hidden lg:block'
           }`}
         >
           <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
             <span className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
-              Módulos Principais
+              Módulos do Sistema ({userRole === 'ADMIN' ? 'Admin' : userRole === 'SELLER' ? 'Vendedor' : 'Técnico'})
             </span>
 
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
-              const isLocked = item.adminOnly && userRole !== 'ADMIN';
 
               return (
                 <button
@@ -307,7 +372,11 @@ export function App() {
                   }}
                   className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
                     isActive
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                      ? userRole === 'ADMIN'
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                        : userRole === 'SELLER'
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                        : 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
                   }`}
                 >
@@ -330,33 +399,47 @@ export function App() {
                         {item.badge}
                       </span>
                     )}
-                    {isLocked && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 rounded font-black">
-                        Admin
-                      </span>
-                    )}
                   </div>
                 </button>
               );
             })}
           </div>
 
-          {/* Quick Info Box */}
-          <div className="p-4 bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl border border-slate-800 shadow-md space-y-2">
+          {/* Quick RBAC Info Card */}
+          <div
+            className={`p-4 rounded-2xl border shadow-md space-y-2 text-white ${
+              userRole === 'ADMIN'
+                ? 'bg-gradient-to-br from-slate-900 to-indigo-950 border-slate-800'
+                : userRole === 'SELLER'
+                ? 'bg-gradient-to-br from-slate-900 to-emerald-950 border-slate-800'
+                : 'bg-gradient-to-br from-slate-900 to-purple-950 border-slate-800'
+            }`}
+          >
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Perfil Ativo:</span>
-              <span className="font-black text-emerald-400">
+              <span className="text-slate-400">Perfil Conectado:</span>
+              <span
+                className={`font-black ${
+                  userRole === 'ADMIN'
+                    ? 'text-indigo-400'
+                    : userRole === 'SELLER'
+                    ? 'text-emerald-400'
+                    : 'text-purple-400'
+                }`}
+              >
                 {userRole === 'ADMIN'
                   ? 'Administrador'
                   : userRole === 'SELLER'
-                  ? 'Vendedor'
-                  : 'Técnico'}
+                  ? 'Vendedor(a)'
+                  : 'Técnico(a)'}
               </span>
             </div>
             <p className="text-[11px] text-slate-300 leading-tight">
-              {userRole === 'ADMIN'
-                ? 'Acesso total a margens de lucro, preços de custo, fornecedores e financeiro.'
-                : 'Preço de custo, fornecedores e relatórios financeiros ocultos por segurança.'}
+              {userRole === 'ADMIN' &&
+                'Acesso irrestrito a margens financeiras, relatórios, preços de custo e fornecedores.'}
+              {userRole === 'SELLER' &&
+                'Acesso a vendas no PDV, abertura de OS e comissões. Preço de custo e financeiro ocultados.'}
+              {userRole === 'TECHNICIAN' &&
+                'Acesso à bancada técnica de reparo, análise de placas e peças. Financeiro e fornecedores ocultados.'}
             </p>
           </div>
         </aside>
@@ -435,27 +518,78 @@ export function App() {
 
           {activeTab === 'SERVICES' && (
             <ServicesModule
+              orders={orders}
               services={servicesList}
+              clients={clients}
+              brands={brands}
+              models={models}
+              productsList={products}
+              users={users}
               userRole={userRole}
               onRefresh={fetchData}
+              onOpenNewOS={handleOpenNewOS}
             />
           )}
 
           {activeTab === 'SUPPLIERS' && (
-            <SuppliersModule
-              suppliers={suppliers}
-              userRole={userRole}
-              onRefresh={fetchData}
-            />
+            <>
+              {userRole === 'ADMIN' ? (
+                <SuppliersModule
+                  suppliers={suppliers}
+                  userRole={userRole}
+                  onRefresh={fetchData}
+                />
+              ) : (
+                <div className="p-8 bg-white dark:bg-slate-900 rounded-3xl border border-rose-200 dark:border-rose-900/60 shadow-sm text-center max-w-lg mx-auto space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+                    <Lock className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                    Acesso Restrito ao Administrador
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    O módulo de gestão de Fornecedores e Contatos Comerciais é exclusivo para usuários com perfil de Administrador.
+                  </p>
+                  <button
+                    onClick={() => handleSwitchRole('ADMIN')}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all"
+                  >
+                    Trocar para Perfil Admin
+                  </button>
+                </div>
+              )}
+            </>
           )}
 
           {activeTab === 'FINANCIAL' && (
-            <FinancialModule
-              userRole={userRole}
-              users={users}
-              sales={sales}
-              onRefresh={fetchData}
-            />
+            <>
+              {userRole === 'ADMIN' ? (
+                <FinancialModule
+                  userRole={userRole}
+                  users={users}
+                  sales={sales}
+                  onRefresh={fetchData}
+                />
+              ) : (
+                <div className="p-8 bg-white dark:bg-slate-900 rounded-3xl border border-rose-200 dark:border-rose-900/60 shadow-sm text-center max-w-lg mx-auto space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+                    <Lock className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white">
+                    Acesso Restrito ao Administrador
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    O módulo de Controle Financeiro, DRE, Contas a Pagar/Receber e Margens de Lucro é restrito exclusivamente a Administradores.
+                  </p>
+                  <button
+                    onClick={() => handleSwitchRole('ADMIN')}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all"
+                  >
+                    Trocar para Perfil Admin
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </main>
       </div>

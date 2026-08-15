@@ -27,6 +27,9 @@ import {
   CheckCheck,
   Send,
   X,
+  UserPlus,
+  AlertCircle,
+  ArrowUpDown,
 } from 'lucide-react';
 import {
   ServiceOrder,
@@ -41,7 +44,7 @@ import {
   ServiceOrderItemService,
   ServiceOrderItemPart,
 } from '../../types';
-import { formatCurrencyBR, formatDateTimeBR, formatDateBR } from '../../lib/formatters';
+import { formatCurrencyBR, formatDateTimeBR, formatDateBR, formatTimeBR } from '../../lib/formatters';
 
 interface ServiceOrdersModuleProps {
   orders: ServiceOrder[];
@@ -73,6 +76,7 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
+  const [sortOrder, setSortOrder] = useState<'OLDEST_FIRST' | 'NEWEST_FIRST' | 'OS_ASC' | 'OS_DESC' | 'PRIORITY'>('OLDEST_FIRST');
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -113,6 +117,22 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
   const [selectedServices, setSelectedServices] = useState<ServiceOrderItemService[]>([]);
   const [selectedParts, setSelectedParts] = useState<ServiceOrderItemPart[]>([]);
 
+  // Quick Client Creation Modal State inside OS creation
+  const [isQuickClientModalOpen, setIsQuickClientModalOpen] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
+  const [newClientDocument, setNewClientDocument] = useState('');
+  const [newClientEmail, setNewClientEmail] = useState('');
+  const [newClientAddress, setNewClientAddress] = useState('');
+  const [newClientCity, setNewClientCity] = useState('');
+  const [newClientNotes, setNewClientNotes] = useState('');
+  const [isSavingQuickClient, setIsSavingQuickClient] = useState(false);
+  const [quickClientError, setQuickClientError] = useState<string | null>(null);
+
+  // Form notifications
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+
   // Financials inside OS Form
   const [discount, setDiscount] = useState<number>(0);
   const [addition, setAddition] = useState<number>(0);
@@ -121,17 +141,84 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
 
   const [isSubmittingOS, setIsSubmittingOS] = useState(false);
 
-  // Sync external open modal request
+  // Sync external open modal request and ensure defaults
   React.useEffect(() => {
     if (isCreateModalOpenExternal) {
       setIsCreateOpen(true);
-      if (brands.length > 0) setBrandId(brands[0].id);
     }
-  }, [isCreateModalOpenExternal, brands]);
+  }, [isCreateModalOpenExternal]);
+
+  React.useEffect(() => {
+    if (isCreateOpen) {
+      setFormError(null);
+      if (!brandId && brands.length > 0) {
+        const firstBrand = brands[0];
+        setBrandId(firstBrand.id);
+        const matching = models.filter((m) => m.brand_id === firstBrand.id);
+        if (matching.length > 0) {
+          setModelId(matching[0].id);
+        }
+      }
+      if (!clientId && clients.length > 0) {
+        setClientId(clients[0].id);
+      }
+    }
+  }, [isCreateOpen, brands, models, clients]);
 
   const handleCloseCreate = () => {
     setIsCreateOpen(false);
+    setFormError(null);
     if (onCloseCreateModalExternal) onCloseCreateModalExternal();
+  };
+
+  // Quick Client Creation Handler
+  const handleCreateQuickClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClientName.trim() || !newClientPhone.trim()) {
+      setQuickClientError('Nome e Telefone são obrigatórios.');
+      return;
+    }
+
+    setIsSavingQuickClient(true);
+    setQuickClientError(null);
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newClientName.trim(),
+          phone: newClientPhone.trim(),
+          document: newClientDocument.trim() || undefined,
+          email: newClientEmail.trim() || undefined,
+          address: newClientAddress.trim() || undefined,
+          city: newClientCity.trim() || undefined,
+          notes: newClientNotes.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao cadastrar cliente');
+      }
+
+      const data = await res.json();
+      onRefresh();
+      if (data.client?.id) {
+        setClientId(data.client.id);
+      }
+      setNewClientName('');
+      setNewClientPhone('');
+      setNewClientDocument('');
+      setNewClientEmail('');
+      setNewClientAddress('');
+      setNewClientCity('');
+      setNewClientNotes('');
+      setIsQuickClientModalOpen(false);
+    } catch (err: any) {
+      setQuickClientError(err.message || 'Falha ao salvar cliente');
+    } finally {
+      setIsSavingQuickClient(false);
+    }
   };
 
   // Filtered models based on selected brand in form
@@ -205,34 +292,44 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
   // Submit New OS
   const handleCreateServiceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientId || !brandId || !modelId || !reportedDefect.trim()) {
-      alert('Por favor preencha Cliente, Marca, Modelo e o Defeito Relatado.');
+    setFormError(null);
+
+    const activeClientId = clientId || (clients.length > 0 ? clients[0].id : '');
+    const activeBrandId = brandId || (brands.length > 0 ? brands[0].id : '');
+    const activeModelId = modelId || (availableModelsForBrand.length > 0 ? availableModelsForBrand[0].id : (models[0]?.id || ''));
+
+    if (!activeClientId) {
+      setFormError('Por favor selecione ou cadastre um Cliente para a Ordem de Serviço.');
+      return;
+    }
+    if (!reportedDefect.trim()) {
+      setFormError('Por favor descreva o Defeito Relatado pelo cliente.');
       return;
     }
 
     setIsSubmittingOS(true);
     try {
-      const clientObj = clients.find((c) => c.id === clientId);
-      const brandObj = brands.find((b) => b.id === brandId);
-      const modelObj = models.find((m) => m.id === modelId);
+      const clientObj = clients.find((c) => c.id === activeClientId);
+      const brandObj = brands.find((b) => b.id === activeBrandId);
+      const modelObj = models.find((m) => m.id === activeModelId);
       const techObj = users.find((u) => u.id === technicianId);
       const sellerObj = users.find((u) => u.id === sellerId);
 
       const payload = {
-        client_id: clientId,
+        client_id: activeClientId,
         client_name: clientObj?.name || 'Cliente',
         client_phone: clientObj?.phone || '',
         client_document: clientObj?.document || '',
-        brand_id: brandId,
-        brand_name: brandObj?.name || '',
-        model_id: modelId,
-        model_name: modelObj?.name || '',
+        brand_id: activeBrandId,
+        brand_name: brandObj?.name || 'Marca',
+        model_id: activeModelId,
+        model_name: modelObj?.name || 'Modelo',
         imei_1: imei1 || undefined,
         imei_2: imei2 || undefined,
         device_password: devicePassword || undefined,
         physical_state: physicalState || undefined,
         accessories: accessories || undefined,
-        reported_defect: reportedDefect,
+        reported_defect: reportedDefect.trim(),
         technical_diagnosis: technicalDiagnosis || undefined,
         status: isMotherboardAnalysis ? 'ANALYSIS_BOARD' : initialStatus,
         is_motherboard_analysis: isMotherboardAnalysis,
@@ -259,26 +356,38 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        // Reset form
-        setClientId('');
-        setImei1('');
-        setImei2('');
-        setDevicePassword('');
-        setPhysicalState('');
-        setAccessories('');
-        setReportedDefect('');
-        setTechnicalDiagnosis('');
-        setSelectedServices([]);
-        setSelectedParts([]);
-        setDiscount(0);
-        setAddition(0);
-        setDepositAmount(0);
-        handleCloseCreate();
-        onRefresh();
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Erro ${res.status}: Falha ao salvar a Ordem de Serviço`);
       }
-    } catch (err) {
-      console.error(err);
+
+      const result = await res.json();
+
+      // Reset form
+      setClientId('');
+      setImei1('');
+      setImei2('');
+      setDevicePassword('');
+      setPhysicalState('');
+      setAccessories('');
+      setReportedDefect('');
+      setTechnicalDiagnosis('');
+      setSelectedServices([]);
+      setSelectedParts([]);
+      setDiscount(0);
+      setAddition(0);
+      setDepositAmount(0);
+      setFormError(null);
+      handleCloseCreate();
+
+      // Success notification
+      setSuccessToast(`OS #${result.serviceOrder?.order_number || ''} criada e salva com sucesso!`);
+      setTimeout(() => setSuccessToast(null), 4000);
+
+      onRefresh();
+    } catch (err: any) {
+      console.error('Erro ao criar OS:', err);
+      setFormError(err.message || 'Erro inesperado ao salvar a Ordem de Serviço.');
     } finally {
       setIsSubmittingOS(false);
     }
@@ -349,22 +458,47 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
     }
   };
 
-  // Filter Orders
+  // Filter & Sort Orders (Default: OLDEST_FIRST / 1º Cadastrado no Topo)
   const filteredOrders = useMemo(() => {
-    return orders.filter((os) => {
-      const matchSearch =
-        os.order_number.toString().includes(searchTerm) ||
-        os.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        os.model_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        os.brand_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (os.imei_1 && os.imei_1.includes(searchTerm));
+    return orders
+      .filter((os) => {
+        const matchSearch =
+          os.order_number.toString().includes(searchTerm) ||
+          os.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          os.model_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          os.brand_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (os.imei_1 && os.imei_1.includes(searchTerm));
 
-      const matchStatus = statusFilter === 'ALL' || os.status === statusFilter;
-      const matchPriority = priorityFilter === 'ALL' || os.priority === priorityFilter;
+        const matchStatus = statusFilter === 'ALL' || os.status === statusFilter;
+        const matchPriority = priorityFilter === 'ALL' || os.priority === priorityFilter;
 
-      return matchSearch && matchStatus && matchPriority;
-    });
-  }, [orders, searchTerm, statusFilter, priorityFilter]);
+        return matchSearch && matchStatus && matchPriority;
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.created_at || a.entry_date || 0).getTime();
+        const timeB = new Date(b.created_at || b.entry_date || 0).getTime();
+
+        if (sortOrder === 'OLDEST_FIRST') {
+          // 1º gerado no topo (FIFO / Mais antigo primeiro - ex: 10/08 antes de 11/08)
+          if (timeA !== timeB) return timeA - timeB;
+          return (a.order_number || 0) - (b.order_number || 0);
+        } else if (sortOrder === 'NEWEST_FIRST') {
+          // Mais recente primeiro
+          if (timeA !== timeB) return timeB - timeA;
+          return (b.order_number || 0) - (a.order_number || 0);
+        } else if (sortOrder === 'OS_ASC') {
+          return (a.order_number || 0) - (b.order_number || 0);
+        } else if (sortOrder === 'OS_DESC') {
+          return (b.order_number || 0) - (a.order_number || 0);
+        } else if (sortOrder === 'PRIORITY') {
+          const priorityScore = (p?: string) => (p === 'URGENT' ? 4 : p === 'HIGH' ? 3 : p === 'NORMAL' ? 2 : 1);
+          const scoreDiff = priorityScore(b.priority) - priorityScore(a.priority);
+          if (scoreDiff !== 0) return scoreDiff;
+          return timeA - timeB;
+        }
+        return timeA - timeB;
+      });
+  }, [orders, searchTerm, statusFilter, priorityFilter, sortOrder]);
 
   // Counts by status
   const countsByStatus = useMemo(() => {
@@ -396,6 +530,14 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
+      {/* Toast Notification */}
+      {successToast && (
+        <div className="fixed top-20 right-6 z-50 p-4 bg-emerald-600 text-white rounded-2xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 duration-200">
+          <CheckCircle2 className="w-5 h-5 text-white shrink-0" />
+          <span className="text-xs font-bold">{successToast}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="flex items-center gap-3">
@@ -546,7 +688,23 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Ordenação */}
+          <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl shadow-sm">
+            <ArrowUpDown className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as any)}
+              className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
+            >
+              <option value="OLDEST_FIRST">📅 1º Cadastrado (Fila Cronológica)</option>
+              <option value="NEWEST_FIRST">⚡ Mais Recentes Primeiro</option>
+              <option value="OS_ASC">🔢 Nº OS (Crescente)</option>
+              <option value="OS_DESC">🔢 Nº OS (Decrescente)</option>
+              <option value="PRIORITY">🚨 Prioridade (Urgentes)</option>
+            </select>
+          </div>
+
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
@@ -568,6 +726,7 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
             <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider">
               <tr>
                 <th className="py-3 px-4">OS #</th>
+                <th className="py-3 px-4">Data & Hora Entrada</th>
                 <th className="py-3 px-4">Cliente & Contato</th>
                 <th className="py-3 px-4">Dispositivo</th>
                 <th className="py-3 px-4">Defeito Relatado</th>
@@ -585,20 +744,30 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
                       key={os.id}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition-colors"
                     >
-                      {/* OS Number & Date */}
+                      {/* OS Number */}
                       <td className="py-3.5 px-4 font-mono">
                         <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-sm">
                           #{os.order_number}
                         </span>
-                        <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                          <Calendar className="w-3 h-3" />
-                          {formatDateTimeBR(os.entry_date)}
-                        </div>
                         {os.priority === 'URGENT' && (
-                          <span className="inline-block mt-1 px-1.5 py-0.5 bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 text-[9px] font-black rounded">
+                          <span className="inline-block mt-1 px-1.5 py-0.5 bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 text-[9px] font-black rounded block w-fit">
                             URGENTE
                           </span>
                         )}
+                      </td>
+
+                      {/* Data & Hora Entrada */}
+                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 text-xs">
+                            <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                            <span>{formatDateBR(os.created_at || os.entry_date)}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                            <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>{formatTimeBR(os.created_at || os.entry_date)}</span>
+                          </div>
+                        </div>
                       </td>
 
                       {/* Client */}
@@ -760,6 +929,17 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
 
             {/* Modal Form Scrollable Body */}
             <form onSubmit={handleCreateServiceOrder} className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Visual Error Banner */}
+              {formError && (
+                <div className="p-4 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 rounded-2xl text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-3 animate-in fade-in">
+                  <AlertCircle className="w-5 h-5 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <div className="flex-1">
+                    <p className="font-black text-rose-900 dark:text-rose-100">Não foi possível salvar a OS</p>
+                    <p className="font-normal">{formError}</p>
+                  </div>
+                </div>
+              )}
+
               {/* SECTION 1: CLIENT & DEVICE CASCADING SELECTORS */}
               <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-4">
                 <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
@@ -769,22 +949,45 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {/* Client */}
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Cliente *
-                    </label>
-                    <select
-                      required
-                      value={clientId}
-                      onChange={(e) => setClientId(e.target.value)}
-                      className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    >
-                      <option value="">Selecione o Cliente...</option>
-                      {clients.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.phone})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                        Cliente *
+                      </label>
+                      <button
+                        type="button"
+                        id="btn-quick-new-client"
+                        onClick={() => setIsQuickClientModalOpen(true)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors"
+                        title="Cadastrar Novo Cliente"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Novo Cliente</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        required
+                        value={clientId}
+                        onChange={(e) => setClientId(e.target.value)}
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <option value="">Selecione o Cliente...</option>
+                        {clients.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.phone})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        id="btn-quick-add-client-icon"
+                        onClick={() => setIsQuickClientModalOpen(true)}
+                        className="p-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 rounded-xl transition-all shadow-sm shrink-0 flex items-center justify-center"
+                        title="Cadastrar Novo Cliente (+)"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Brand Selector */}
@@ -1242,6 +1445,162 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
         </div>
       )}
 
+      {/* QUICK NEW CLIENT MODAL INSIDE OS CREATION */}
+      {isQuickClientModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/10 rounded-xl">
+                  <UserPlus className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black">Cadastrar Novo Cliente</h3>
+                  <p className="text-[11px] text-indigo-100">
+                    O cliente será cadastrado e selecionado automaticamente na OS
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickClientModalOpen(false)}
+                className="p-1.5 rounded-xl text-white/80 hover:text-white hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Form Body */}
+            <form onSubmit={handleCreateQuickClient} className="p-6 space-y-4 text-xs">
+              {quickClientError && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-700 dark:text-rose-300 font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{quickClientError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Amanda Ferreira Silva"
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Telefone / WhatsApp *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="(11) 98765-4321"
+                    value={newClientPhone}
+                    onChange={(e) => setNewClientPhone(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    CPF / CNPJ (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="000.000.000-00"
+                    value={newClientDocument}
+                    onChange={(e) => setNewClientDocument(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    E-mail (Opcional)
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="cliente@email.com"
+                    value={newClientEmail}
+                    onChange={(e) => setNewClientEmail(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Cidade / Bairro (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="São Paulo - SP"
+                    value={newClientCity}
+                    onChange={(e) => setNewClientCity(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Endereço Completo (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Rua das Flores, 123, Apto 45"
+                  value={newClientAddress}
+                  onChange={(e) => setNewClientAddress(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Observações do Cliente (Opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Preferência por contato via WhatsApp"
+                  value={newClientNotes}
+                  onChange={(e) => setNewClientNotes(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickClientModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingQuickClient}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-xl shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{isSavingQuickClient ? 'Salvando...' : 'Salvar & Vincular à OS'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* --- STATUS CHANGE MODAL --- */}
       {selectedOrderForStatus && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1430,6 +1789,38 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+              {/* Informações de Data e Hora de Entrada */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Data de Entrada:</span>
+                  <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 mt-1">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>{formatDateBR(selectedOrderForView.created_at || selectedOrderForView.entry_date)}</span>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Horário de Entrada:</span>
+                  <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 mt-1">
+                    <Clock className="w-3.5 h-3.5 text-purple-500" />
+                    <span>{formatTimeBR(selectedOrderForView.created_at || selectedOrderForView.entry_date)}</span>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Técnico Resp.:</span>
+                  <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 mt-1">
+                    <User className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="truncate">{selectedOrderForView.technician_name || 'Aguardando Técnico'}</span>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Atendente / Loja:</span>
+                  <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 mt-1">
+                    <User className="w-3.5 h-3.5 text-amber-500" />
+                    <span className="truncate">{selectedOrderForView.seller_name || 'Balcão Principal'}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Status Header */}
               <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
                 <div>

@@ -1218,6 +1218,14 @@ async function startServer() {
       );
     }
 
+    // Sort chronologically (FIFO - 1º cadastrado / mais antigo primeiro, ex: 10/08 antes de 11/08)
+    list.sort((a, b) => {
+      const timeA = new Date(a.created_at || a.entry_date || 0).getTime();
+      const timeB = new Date(b.created_at || b.entry_date || 0).getTime();
+      if (timeA !== timeB) return timeA - timeB;
+      return (a.order_number || 0) - (b.order_number || 0);
+    });
+
     const safeList = list.map((os) => sanitizeServiceOrderForRole(os, role));
 
     // Calculate status counts
@@ -1232,22 +1240,29 @@ async function startServer() {
       cancelled: serviceOrders.filter((os) => os.status === 'CANCELLED').length,
     };
 
-    res.json({ serviceOrders: safeList, statusCounts });
+    res.json({ serviceOrders: safeList, orders: safeList, statusCounts });
   });
 
   app.get('/api/service-orders/:id', (req, res) => {
     const role = getClientRole(req);
     const os = serviceOrders.find((o) => o.id === req.params.id);
     if (!os) return res.status(404).json({ error: 'Ordem de Serviço não encontrada.' });
-    res.json({ serviceOrder: sanitizeServiceOrderForRole(os, role) });
+    const safeOS = sanitizeServiceOrderForRole(os, role);
+    res.json({ serviceOrder: safeOS, order: safeOS });
   });
 
   app.post('/api/service-orders', (req, res) => {
     const role = getClientRole(req);
-    const {
+    const body = req.body || {};
+    let {
       client_id,
+      client_name,
+      client_phone,
+      client_document,
       brand_id,
+      brand_name,
       model_id,
+      model_name,
       imei_1,
       imei_2,
       device_password,
@@ -1261,41 +1276,89 @@ async function startServer() {
       technician_id,
       seller_id,
       services: osServices,
+      services_items,
       parts: osParts,
+      parts_items,
       discount,
+      discount_amount,
       addition,
+      surcharge_amount,
       deposit_amount,
       payment_method,
       delivery_expected_date,
-    } = req.body;
+      delivery_forecast,
+    } = body;
 
-    if (!client_id || !brand_id || !model_id || !reported_defect?.trim()) {
-      return res.status(400).json({ error: 'Cliente, Marca, Modelo e Defeito Relatado são obrigatórios.' });
+    // Harmonize Client
+    let client = clients.find((c) => c.id === client_id);
+    if (!client && client_name?.trim()) {
+      client = clients.find((c) => c.name.toLowerCase() === client_name.trim().toLowerCase());
+      if (!client) {
+        client = {
+          id: `cli_${Date.now()}`,
+          name: client_name.trim(),
+          phone: client_phone?.trim() || '(11) 99999-9999',
+          document: client_document?.trim(),
+          city: 'São Paulo',
+          created_at: new Date().toISOString(),
+        };
+        clients.unshift(client);
+      }
+      client_id = client.id;
+    } else if (!client && clients.length > 0) {
+      client = clients[0];
+      client_id = client.id;
     }
 
-    const client = clients.find((c) => c.id === client_id);
-    const brand = brands.find((b) => b.id === brand_id);
-    const model = models.find((m) => m.id === model_id);
+    // Harmonize Brand
+    let brand = brands.find((b) => b.id === brand_id);
+    if (!brand && brand_name?.trim()) {
+      brand = brands.find((b) => b.name.toLowerCase() === brand_name.trim().toLowerCase());
+    }
+    if (!brand && brands.length > 0) {
+      brand = brands[0];
+      brand_id = brand.id;
+    }
+
+    // Harmonize Model
+    let model = models.find((m) => m.id === model_id);
+    if (!model && model_name?.trim()) {
+      model = models.find((m) => m.name.toLowerCase() === model_name.trim().toLowerCase());
+    }
+    if (!model) {
+      const brandModels = brand ? models.filter((m) => m.brand_id === brand.id) : models;
+      if (brandModels.length > 0) {
+        model = brandModels[0];
+        model_id = model.id;
+      } else if (models.length > 0) {
+        model = models[0];
+        model_id = model.id;
+      }
+    }
+
+    const defect = reported_defect?.trim() || 'Verificação e reparo técnico geral';
+
     const technician = users.find((u) => u.id === technician_id);
     const seller = users.find((u) => u.id === seller_id);
 
-    const finalServices: ServiceOrderItemService[] = (osServices || []).map((s: any) => ({
-      service_id: s.service_id,
-      service_name: s.service_name,
-      price: Number(s.price) || 0,
+    const rawServices = osServices || services_items || [];
+    const finalServices: ServiceOrderItemService[] = rawServices.map((s: any) => ({
+      service_id: s.service_id || s.id || `srv_${Date.now()}`,
+      service_name: s.service_name || s.name || 'Serviço de Bancada',
+      price: Number(s.price !== undefined ? s.price : s.unit_price) || 0,
       quantity: Number(s.quantity) || 1,
     }));
 
-    const finalParts: ServiceOrderItemPart[] = (osParts || []).map((p: any) => {
-      const dbProd = products.find((prod) => prod.id === p.product_id);
-      // Deduct stock for used parts
+    const rawParts = osParts || parts_items || [];
+    const finalParts: ServiceOrderItemPart[] = rawParts.map((p: any) => {
+      const dbProd = products.find((prod) => prod.id === (p.product_id || p.id));
       if (dbProd && dbProd.stock_quantity >= (p.quantity || 1)) {
         dbProd.stock_quantity -= p.quantity || 1;
       }
       return {
-        product_id: p.product_id,
-        product_name: p.product_name || (dbProd ? dbProd.name : 'Peça'),
-        price: Number(p.price) || 0,
+        product_id: p.product_id || p.id || `prt_${Date.now()}`,
+        product_name: p.product_name || p.name || (dbProd ? dbProd.name : 'Peça'),
+        price: Number(p.price !== undefined ? p.price : p.unit_price) || 0,
         cost_price: dbProd ? dbProd.cost_price : 0,
         quantity: Number(p.quantity) || 1,
       };
@@ -1303,8 +1366,8 @@ async function startServer() {
 
     const totalServices = finalServices.reduce((acc, s) => acc + s.price * s.quantity, 0);
     const totalParts = finalParts.reduce((acc, p) => acc + p.price * p.quantity, 0);
-    const numDiscount = Number(discount) || 0;
-    const numAddition = Number(addition) || 0;
+    const numDiscount = Number(discount !== undefined ? discount : discount_amount) || 0;
+    const numAddition = Number(addition !== undefined ? addition : surcharge_amount) || 0;
     const totalAmount = Math.max(0, totalServices + totalParts - numDiscount + numAddition);
     const numDeposit = Number(deposit_amount) || 0;
     const remainingAmount = Math.max(0, totalAmount - numDeposit);
@@ -1322,21 +1385,21 @@ async function startServer() {
       id: `os_${orderNum}`,
       order_number: orderNum,
       entry_date: now,
-      delivery_expected_date: delivery_expected_date || undefined,
-      client_id,
-      client_name: client ? client.name : 'Cliente',
-      client_phone: client ? client.phone : '',
-      client_document: client ? client.document : undefined,
-      brand_id,
-      brand_name: brand ? brand.name : 'Marca',
-      model_id,
-      model_name: model ? model.name : 'Modelo',
+      delivery_expected_date: delivery_expected_date || delivery_forecast || undefined,
+      client_id: client?.id || client_id || 'cli_default',
+      client_name: client?.name || client_name || 'Cliente',
+      client_phone: client?.phone || client_phone || '',
+      client_document: client?.document || client_document || undefined,
+      brand_id: brand?.id || brand_id || 'brand_default',
+      brand_name: brand?.name || brand_name || 'Smartphone',
+      model_id: model?.id || model_id || 'model_default',
+      model_name: model?.name || model_name || 'Celular / Dispositivo',
       imei_1: imei_1?.trim(),
       imei_2: imei_2?.trim(),
       device_password: device_password?.trim(),
       physical_state: physical_state?.trim(),
       accessories: accessories?.trim(),
-      reported_defect: reported_defect.trim(),
+      reported_defect: defect,
       technical_diagnosis: technical_diagnosis?.trim(),
       status: initialStatus,
       is_motherboard_analysis: Boolean(is_motherboard_analysis || initialStatus === 'ANALYSIS_BOARD'),
@@ -1383,7 +1446,8 @@ async function startServer() {
     }
 
     serviceOrders.unshift(newOS);
-    res.status(201).json({ serviceOrder: sanitizeServiceOrderForRole(newOS, role) });
+    const safeNewOS = sanitizeServiceOrderForRole(newOS, role);
+    res.status(201).json({ serviceOrder: safeNewOS, order: safeNewOS });
   });
 
   app.put('/api/service-orders/:id', (req, res) => {
@@ -1489,16 +1553,17 @@ async function startServer() {
     }
 
     os.updated_at = new Date().toISOString();
-    res.json({ serviceOrder: sanitizeServiceOrderForRole(os, role) });
+    const safeUpdatedOS = sanitizeServiceOrderForRole(os, role);
+    res.json({ serviceOrder: safeUpdatedOS, order: safeUpdatedOS });
   });
 
-  // Change Status Endpoint
-  app.post('/api/service-orders/:id/status', (req, res) => {
+  // Change Status Endpoint (Supports both PATCH and POST)
+  const handleStatusUpdate = (req: Request, res: Response) => {
     const role = getClientRole(req);
     const os = serviceOrders.find((o) => o.id === req.params.id);
     if (!os) return res.status(404).json({ error: 'Ordem de Serviço não encontrada.' });
 
-    const { status, note } = req.body;
+    const { status, note, notes, technical_diagnosis, user_name } = req.body;
     if (!status) return res.status(400).json({ error: 'Novo status é obrigatório.' });
 
     const prevStatus = os.status;
@@ -1506,18 +1571,28 @@ async function startServer() {
     if (status === 'ANALYSIS_BOARD') {
       os.is_motherboard_analysis = true;
     }
+    if (technical_diagnosis !== undefined) {
+      os.technical_diagnosis = technical_diagnosis;
+    }
+
+    const noteText = note || notes || `Status alterado de ${prevStatus} para ${status}.`;
+    const author = user_name || (role === 'ADMIN' ? 'Carlos Mendes' : role === 'TECHNICIAN' ? 'Lucas Rocha' : 'Mariana Silva');
 
     os.history.unshift({
       id: `h_${Date.now()}`,
       date: new Date().toISOString(),
       status,
-      note: note || `Status alterado de ${prevStatus} para ${status}.`,
-      user_name: role === 'ADMIN' ? 'Carlos Mendes' : 'Lucas Rocha',
+      note: noteText,
+      user_name: author,
     });
 
     os.updated_at = new Date().toISOString();
-    res.json({ serviceOrder: sanitizeServiceOrderForRole(os, role) });
-  });
+    const safeStatusOS = sanitizeServiceOrderForRole(os, role);
+    res.json({ serviceOrder: safeStatusOS, order: safeStatusOS });
+  };
+
+  app.post('/api/service-orders/:id/status', handleStatusUpdate);
+  app.patch('/api/service-orders/:id/status', handleStatusUpdate);
 
   // Record Payment for OS
   app.post('/api/service-orders/:id/payment', (req, res) => {
