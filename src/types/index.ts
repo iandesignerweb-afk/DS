@@ -296,3 +296,25 @@ export const STATUS_CONFIG: Record<
     iconName: 'XCircle',
   },
 };
+
+export interface StoreSettings {
+  store_name: string;
+  store_subtitle: string;
+  logo_url: string;
+  cnpj_cpf: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  address_street: string;
+  address_number: string;
+  address_neighborhood: string;
+  address_city: string;
+  address_state: string;
+  address_zip: string;
+  receipt_footer_msg: string;
+  warranty_terms: string;
+  default_commission_pct: number;
+  auto_print_receipt: boolean;
+  paper_size: '80mm' | '58mm' | 'A4';
+}
+

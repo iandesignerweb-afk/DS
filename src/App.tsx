@@ -23,6 +23,7 @@ import {
   Lock,
   Award,
   ArrowRight,
+  Settings,
 } from 'lucide-react';
 import {
   UserRole,
@@ -36,6 +37,7 @@ import {
   ServiceOrder,
   Sale,
   STATUS_CONFIG,
+  StoreSettings,
 } from './types';
 import { LoginView, TEST_USERS } from './components/auth/LoginView';
 import { DashboardModule } from './components/dashboard/DashboardModule';
@@ -47,6 +49,7 @@ import { ClientsModule } from './components/clients/ClientsModule';
 import { ServicesModule } from './components/services/ServicesModule';
 import { SuppliersModule } from './components/suppliers/SuppliersModule';
 import { FinancialModule } from './components/financial/FinancialModule';
+import { SettingsModule } from './components/settings/SettingsModule';
 
 type NavTab =
   | 'DASHBOARD'
@@ -57,7 +60,8 @@ type NavTab =
   | 'CLIENTS'
   | 'SERVICES'
   | 'SUPPLIERS'
-  | 'FINANCIAL';
+  | 'FINANCIAL'
+  | 'SETTINGS';
 
 export function App() {
   // Authentication & Current User State
@@ -80,6 +84,40 @@ export function App() {
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
 
+  // Store Settings & Identity State
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
+    const saved = localStorage.getItem('dualcell_store_settings');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // fallback
+      }
+    }
+    return {
+      store_name: 'DUAL CELL PRO',
+      store_subtitle: 'Assistência Técnica & PDV',
+      logo_url: '',
+      cnpj_cpf: '12.345.678/0001-90',
+      phone: '(11) 3322-1100',
+      whatsapp: '(11) 98111-2233',
+      email: 'contato@dualcellpro.com.br',
+      address_street: 'Av. Principal',
+      address_number: '1000',
+      address_neighborhood: 'Centro',
+      address_city: 'São Paulo',
+      address_state: 'SP',
+      address_zip: '01001-000',
+      receipt_footer_msg:
+        'Garantia legal de 90 dias para defeitos de fabricação (apresente este cupom). Não trocamos produtos com marcas de mau uso, umidade ou rompimento de lacre. Agradecemos a sua preferência!',
+      warranty_terms:
+        'Garantia de 90 dias referente aos serviços executados e peças substituídas descritas neste termo. Aparelhos não retirados em até 90 dias serão considerados abandonados conforme Artigo 1.275 do Código Civil.',
+      default_commission_pct: 4.0,
+      auto_print_receipt: true,
+      paper_size: '80mm',
+    };
+  });
+
   // Trigger for Opening New OS from Dashboard or POS
   const [isCreateOSModalOpen, setIsCreateOSModalOpen] = useState(false);
 
@@ -98,6 +136,7 @@ export function App() {
         suppliersRes,
         ordersRes,
         salesRes,
+        settingsRes,
       ] = await Promise.all([
         fetch('/api/users', { headers }),
         fetch('/api/clients', { headers }),
@@ -108,6 +147,7 @@ export function App() {
         fetch('/api/suppliers', { headers }),
         fetch('/api/service-orders', { headers }),
         fetch('/api/pos/sales', { headers }),
+        fetch('/api/settings', { headers }),
       ]);
 
       if (usersRes.ok) {
@@ -146,8 +186,72 @@ export function App() {
         const d = await salesRes.json().catch(() => ({}));
         setSales(d.sales || []);
       }
+      if (settingsRes.ok) {
+        const d = await settingsRes.json().catch(() => ({}));
+        if (d.settings) {
+          setStoreSettings(d.settings);
+          localStorage.setItem('dualcell_store_settings', JSON.stringify(d.settings));
+        }
+      }
     } catch (err) {
       console.error('Error fetching system data:', err);
+    }
+  };
+
+  // Update Store Settings Handler
+  const handleUpdateStoreSettings = async (newSettings: Partial<StoreSettings>): Promise<boolean> => {
+    try {
+      const merged = { ...storeSettings, ...newSettings };
+      setStoreSettings(merged);
+      localStorage.setItem('dualcell_store_settings', JSON.stringify(merged));
+
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': userRole,
+        },
+        body: JSON.stringify(merged),
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.settings) {
+          setStoreSettings(data.settings);
+          localStorage.setItem('dualcell_store_settings', JSON.stringify(data.settings));
+        }
+        return true;
+      }
+      return true; // Still true since saved locally
+    } catch (err) {
+      console.error('Failed to update store settings:', err);
+      return true;
+    }
+  };
+
+  // Update User Profile Handler
+  const handleUpdateUserProfile = async (updatedProfile: Partial<UserType>): Promise<boolean> => {
+    try {
+      const updatedUser = { ...currentUser, ...updatedProfile };
+      setCurrentUser(updatedUser);
+
+      // Also update in users array
+      setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? { ...u, ...updatedProfile } : u)));
+
+      if (currentUser?.id) {
+        await fetch(`/api/users/${currentUser.id}/profile`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-role': userRole,
+          },
+          body: JSON.stringify(updatedProfile),
+        }).catch(() => {});
+      }
+      return true;
+    } catch (err) {
+      console.error('Failed to update user profile:', err);
+      return true;
     }
   };
 
@@ -261,6 +365,12 @@ export function App() {
       adminOnly: true,
       roles: ['ADMIN'],
     },
+    {
+      id: 'SETTINGS' as NavTab,
+      label: 'Configurações da Conta & Loja',
+      icon: Settings,
+      roles: ['ADMIN', 'SELLER', 'TECHNICIAN', 'CASHIER'],
+    },
   ];
 
   const visibleNavItems = allNavItems.filter((item) => item.roles.includes(userRole));
@@ -281,17 +391,26 @@ export function App() {
 
             <div
               onClick={() => setActiveTab(userRole === 'TECHNICIAN' ? 'ORDERS' : 'POS')}
-              className="flex items-center gap-2.5 cursor-pointer"
+              className="flex items-center gap-2.5 cursor-pointer group"
             >
-              <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-600/30">
-                <Smartphone className="w-5 h-5" />
+              <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-600/30 overflow-hidden shrink-0">
+                {storeSettings.logo_url ? (
+                  <img
+                    src={storeSettings.logo_url}
+                    alt={storeSettings.store_name}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <Smartphone className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                )}
               </div>
               <div>
-                <span className="text-sm font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-                  DUAL CELL <span className="text-indigo-600 dark:text-indigo-400">PRO</span>
+                <span className="text-sm font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5 leading-tight">
+                  {storeSettings.store_name || 'DUAL CELL PRO'}
                 </span>
-                <span className="text-[10px] text-slate-400 font-semibold block leading-none">
-                  Assistência Técnica & PDV
+                <span className="text-[10px] text-slate-400 font-semibold block leading-tight truncate max-w-[190px]">
+                  {storeSettings.store_subtitle || 'Assistência Técnica & PDV'}
                 </span>
               </div>
             </div>
@@ -299,9 +418,17 @@ export function App() {
 
           {/* Center / Right: LOGGED USER PROFILE BADGE, THEME TOGGLE & LOGOUT */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Current Logged User Profile Pill */}
-            <div className="flex items-center gap-2.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-              <div className="w-7 h-7 rounded-full overflow-hidden bg-indigo-200 dark:bg-indigo-900 flex items-center justify-center text-xs font-bold text-indigo-700 dark:text-indigo-300">
+            {/* Current Logged User Profile Pill (Click to open Settings / Profile) */}
+            <button
+              onClick={() => setActiveTab('SETTINGS')}
+              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl border transition-all text-left ${
+                activeTab === 'SETTINGS'
+                  ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700 ring-2 ring-indigo-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-200/80 dark:hover:bg-slate-750'
+              }`}
+              title="Clique para abrir Configurações e Meu Perfil"
+            >
+              <div className="w-7 h-7 rounded-full overflow-hidden bg-indigo-200 dark:bg-indigo-900 flex items-center justify-center text-xs font-bold text-indigo-700 dark:text-indigo-300 shrink-0">
                 {currentUser?.avatar ? (
                   <img
                     src={currentUser.avatar}
@@ -313,7 +440,7 @@ export function App() {
                   currentUser?.name?.charAt(0) || 'U'
                 )}
               </div>
-              <div className="text-left">
+              <div className="hidden sm:block text-left">
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight">
                   {currentUser.name}
                 </span>
@@ -325,7 +452,8 @@ export function App() {
                     : '🔧 Técnico de Bancada'}
                 </span>
               </div>
-            </div>
+              <Settings className="w-3.5 h-3.5 text-slate-400 hover:text-indigo-600 transition-colors ml-0.5" />
+            </button>
 
             {/* Dark mode toggle */}
             <button
@@ -456,6 +584,7 @@ export function App() {
               sales={sales}
               products={products}
               userRole={userRole}
+              storeSettings={storeSettings}
               onNavigate={(tab) => setActiveTab(tab as NavTab)}
               onOpenNewOS={handleOpenNewOS}
             />
@@ -465,9 +594,13 @@ export function App() {
             <PosModule
               products={products}
               clients={clients}
+              brands={brands}
+              models={models}
+              servicesList={servicesList}
               users={users}
               userRole={userRole}
               sales={sales}
+              storeSettings={storeSettings}
               onRefreshData={fetchData}
               onOpenNewOS={handleOpenNewOS}
             />
@@ -595,6 +728,16 @@ export function App() {
                 </div>
               )}
             </>
+          )}
+
+          {activeTab === 'SETTINGS' && (
+            <SettingsModule
+              storeSettings={storeSettings}
+              currentUser={currentUser}
+              userRole={userRole}
+              onUpdateStoreSettings={handleUpdateStoreSettings}
+              onUpdateUserProfile={handleUpdateUserProfile}
+            />
           )}
         </main>
       </div>

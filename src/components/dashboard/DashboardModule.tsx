@@ -21,7 +21,7 @@ import {
   Calendar,
   Printer,
 } from 'lucide-react';
-import { ServiceOrder, Sale, Product, STATUS_CONFIG, UserRole } from '../../types';
+import { ServiceOrder, Sale, Product, STATUS_CONFIG, UserRole, StoreSettings } from '../../types';
 import { formatCurrencyBR, formatDateTimeBR } from '../../lib/formatters';
 import { ThermalReceiptModal } from '../pos/ThermalReceiptModal';
 
@@ -30,6 +30,7 @@ interface DashboardModuleProps {
   sales: Sale[];
   products: Product[];
   userRole: UserRole;
+  storeSettings?: StoreSettings;
   onNavigate: (tab: string) => void;
   onOpenNewOS: () => void;
 }
@@ -39,6 +40,7 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
   sales,
   products,
   userRole,
+  storeSettings,
   onNavigate,
   onOpenNewOS,
 }) => {
@@ -478,6 +480,7 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
         sale={selectedSaleForReceipt}
         isOpen={!!selectedSaleForReceipt}
         onClose={() => setSelectedSaleForReceipt(null)}
+        storeSettings={storeSettings}
       />
     </div>
   );

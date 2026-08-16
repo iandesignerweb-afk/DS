@@ -1,6 +1,6 @@
 import React from 'react';
 import { Printer, X, Check, ShieldCheck } from 'lucide-react';
-import { Sale, Client } from '../../types';
+import { Sale, Client, StoreSettings } from '../../types';
 import { formatCurrencyBR, formatDateTimeBR } from '../../lib/formatters';
 
 interface ThermalReceiptModalProps {
@@ -9,6 +9,7 @@ interface ThermalReceiptModalProps {
   onClose: () => void;
   client?: Client | null;
   amountGiven?: number | null;
+  storeSettings?: StoreSettings;
 }
 
 export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
@@ -17,12 +18,26 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   onClose,
   client,
   amountGiven,
+  storeSettings,
 }) => {
   if (!isOpen || !sale) return null;
 
   const handlePrint = () => {
     window.print();
   };
+
+  const storeName = storeSettings?.store_name || 'DUAL CELL PRO';
+  const storeSubtitle = storeSettings?.store_subtitle || 'ASSISTÊNCIA TÉCNICA & ACESSÓRIOS';
+  const cnpj = storeSettings?.cnpj_cpf || '12.345.678/0001-90';
+  const address = storeSettings
+    ? `${storeSettings.address_street}, ${storeSettings.address_number} - ${storeSettings.address_neighborhood}`
+    : 'Av. Principal, 1000 - Centro';
+  const phoneContacts = storeSettings
+    ? `WhatsApp: ${storeSettings.whatsapp || storeSettings.phone} | Tel: ${storeSettings.phone}`
+    : 'WhatsApp: (11) 98111-2233 | Tel: (11) 3322-1100';
+  const footerMsg =
+    storeSettings?.receipt_footer_msg ||
+    'Garantia legal de 90 dias para defeitos de fabricação (apresente este cupom).';
 
   const calculatedSubtotal = sale.items.reduce(
     (acc, item) => acc + (item.unit_price || item.total / item.quantity) * item.quantity,
@@ -89,11 +104,21 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
           >
             {/* Header da Loja */}
             <div className="text-center pb-2 border-b border-dashed border-slate-400 space-y-0.5">
-              <h2 className="font-black text-sm tracking-tight text-black">DUAL CELL PRO</h2>
-              <p className="text-[10px] font-bold text-slate-800">ASSISTÊNCIA TÉCNICA & ACESSÓRIOS</p>
-              <p className="text-[9px] text-slate-700">CNPJ: 12.345.678/0001-90</p>
-              <p className="text-[9px] text-slate-700">Av. Principal, 1000 - Centro</p>
-              <p className="text-[9px] text-slate-700">WhatsApp: (11) 98111-2233 | Tel: (11) 3322-1100</p>
+              {storeSettings?.logo_url && (
+                <div className="flex justify-center pb-1">
+                  <img
+                    src={storeSettings.logo_url}
+                    alt={storeName}
+                    className="max-h-12 max-w-[140px] object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+              <h2 className="font-black text-sm tracking-tight text-black">{storeName}</h2>
+              <p className="text-[10px] font-bold text-slate-800">{storeSubtitle}</p>
+              <p className="text-[9px] text-slate-700">CNPJ: {cnpj}</p>
+              <p className="text-[9px] text-slate-700">{address}</p>
+              <p className="text-[9px] text-slate-700">{phoneContacts}</p>
             </div>
 
             {/* Dados do Cupom */}
@@ -197,10 +222,9 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
 
             {/* Termos de Garantia e Rodapé */}
             <div className="pt-2 text-center space-y-1 text-[9px] text-slate-700">
-              <p className="font-bold text-slate-900">
-                Garantia legal de 90 dias para defeitos de fabricação (apresente este cupom).
+              <p className="font-bold text-slate-900 leading-snug">
+                {footerMsg}
               </p>
-              <p>Não trocamos produtos com marcas de mau uso, umidade ou rompimento de lacre.</p>
               <p className="font-bold pt-0.5 text-black">Agradecemos a sua preferência!</p>
               
               {/* Simulação de Código de Barras */}

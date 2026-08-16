@@ -215,7 +215,51 @@ export interface FinancialAccount {
   notes?: string;
 }
 
+export interface StoreSettings {
+  store_name: string;
+  store_subtitle: string;
+  logo_url: string;
+  cnpj_cpf: string;
+  phone: string;
+  whatsapp: string;
+  email: string;
+  address_street: string;
+  address_number: string;
+  address_neighborhood: string;
+  address_city: string;
+  address_state: string;
+  address_zip: string;
+  receipt_footer_msg: string;
+  warranty_terms: string;
+  default_commission_pct: number;
+  auto_print_receipt: boolean;
+  paper_size: '80mm' | '58mm' | 'A4';
+}
+
 // --- In-Memory Initial Seed Database ---
+
+let storeSettings: StoreSettings = {
+  store_name: 'DUAL CELL PRO',
+  store_subtitle: 'Assistência Técnica & PDV',
+  logo_url: '',
+  cnpj_cpf: '12.345.678/0001-90',
+  phone: '(11) 3322-1100',
+  whatsapp: '(11) 98111-2233',
+  email: 'contato@dualcellpro.com.br',
+  address_street: 'Av. Principal',
+  address_number: '1000',
+  address_neighborhood: 'Centro',
+  address_city: 'São Paulo',
+  address_state: 'SP',
+  address_zip: '01001-000',
+  receipt_footer_msg:
+    'Garantia legal de 90 dias para defeitos de fabricação (apresente este cupom). Não trocamos produtos com marcas de mau uso, umidade ou rompimento de lacre. Agradecemos a sua preferência!',
+  warranty_terms:
+    'Garantia de 90 dias referente aos serviços executados e peças substituídas descritas neste termo. Aparelhos não retirados em até 90 dias serão considerados abandonados conforme Artigo 1.275 do Código Civil.',
+  default_commission_pct: 4.0,
+  auto_print_receipt: true,
+  paper_size: '80mm',
+};
 
 const users: User[] = [
   {
@@ -1983,6 +2027,55 @@ async function startServer() {
     if (idx === -1) return res.status(404).json({ error: 'Conta não encontrada.' });
     financialAccounts.splice(idx, 1);
     res.json({ success: true });
+  });
+
+  // --- Settings & Store Profile Routes ---
+  app.get('/api/settings', (_req, res) => {
+    res.json({ settings: storeSettings });
+  });
+
+  app.put('/api/settings', requireAdmin, (req, res) => {
+    const body = req.body || {};
+    storeSettings = {
+      ...storeSettings,
+      ...body,
+      // Sanitizations
+      store_name: body.store_name?.trim() || storeSettings.store_name,
+      store_subtitle: body.store_subtitle?.trim() ?? storeSettings.store_subtitle,
+      logo_url: body.logo_url ?? storeSettings.logo_url,
+      cnpj_cpf: body.cnpj_cpf?.trim() ?? storeSettings.cnpj_cpf,
+      phone: body.phone?.trim() ?? storeSettings.phone,
+      whatsapp: body.whatsapp?.trim() ?? storeSettings.whatsapp,
+      email: body.email?.trim() ?? storeSettings.email,
+      address_street: body.address_street?.trim() ?? storeSettings.address_street,
+      address_number: body.address_number?.trim() ?? storeSettings.address_number,
+      address_neighborhood: body.address_neighborhood?.trim() ?? storeSettings.address_neighborhood,
+      address_city: body.address_city?.trim() ?? storeSettings.address_city,
+      address_state: body.address_state?.trim() ?? storeSettings.address_state,
+      address_zip: body.address_zip?.trim() ?? storeSettings.address_zip,
+      receipt_footer_msg: body.receipt_footer_msg?.trim() ?? storeSettings.receipt_footer_msg,
+      warranty_terms: body.warranty_terms?.trim() ?? storeSettings.warranty_terms,
+      default_commission_pct: Number(body.default_commission_pct) || storeSettings.default_commission_pct,
+      auto_print_receipt: typeof body.auto_print_receipt === 'boolean' ? body.auto_print_receipt : storeSettings.auto_print_receipt,
+      paper_size: body.paper_size || storeSettings.paper_size,
+    };
+    res.json({ settings: storeSettings, message: 'Configurações da loja atualizadas com sucesso.' });
+  });
+
+  // --- User Account Profile Update ---
+  app.patch('/api/users/:id/profile', (req, res) => {
+    const user = users.find((u) => u.id === req.params.id);
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const { name, email, avatar, commission_percentage } = req.body;
+    if (name) user.name = name.trim();
+    if (email) user.email = email.trim();
+    if (avatar !== undefined) user.avatar = avatar;
+    if (commission_percentage !== undefined && req.headers['x-user-role'] === 'ADMIN') {
+      user.commission_percentage = Number(commission_percentage);
+    }
+
+    res.json({ user, message: 'Perfil do usuário atualizado com sucesso.' });
   });
 
   // Strict API 404 handler - prevents HTML index.html fallback for broken /api/ requests

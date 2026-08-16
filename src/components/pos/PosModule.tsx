@@ -22,17 +22,39 @@ import {
   Sparkles,
   CheckCircle2,
   Receipt,
+  Wrench,
+  Smartphone,
+  Calendar,
+  Lock,
+  Tag,
+  ShieldCheck,
+  FileText,
+  UserPlus,
 } from 'lucide-react';
-import { Product, Client, User as UserType, Sale, CashRegister } from '../../types';
+import {
+  Product,
+  Client,
+  User as UserType,
+  Sale,
+  CashRegister,
+  StoreSettings,
+  Brand,
+  DeviceModel,
+  Service,
+} from '../../types';
 import { formatCurrencyBR, formatDateTimeBR } from '../../lib/formatters';
 import { ThermalReceiptModal } from './ThermalReceiptModal';
 
 interface PosModuleProps {
   products: Product[];
   clients: Client[];
+  brands?: Brand[];
+  models?: DeviceModel[];
+  servicesList?: Service[];
   users: UserType[];
   userRole: string;
   sales?: Sale[];
+  storeSettings?: StoreSettings;
   onRefreshData: () => void;
   onOpenNewOS: () => void;
 }
@@ -40,9 +62,13 @@ interface PosModuleProps {
 export const PosModule: React.FC<PosModuleProps> = ({
   products,
   clients,
+  brands = [],
+  models = [],
+  servicesList = [],
   users,
   userRole,
   sales = [],
+  storeSettings,
   onRefreshData,
   onOpenNewOS,
 }) => {
@@ -65,7 +91,9 @@ export const PosModule: React.FC<PosModuleProps> = ({
 
   // Hidden Container Menu Drawer State (Menu do canto superior direito)
   const [isContainerMenuOpen, setIsContainerMenuOpen] = useState(false);
-  const [activeContainerTab, setActiveContainerTab] = useState<'CAIXA_STATUS' | 'HISTORICO_VENDAS' | 'SANGRIA' | 'SUPRIMENTO' | 'QUICK_PROD'>('CAIXA_STATUS');
+  const [activeContainerTab, setActiveContainerTab] = useState<
+    'CAIXA_STATUS' | 'HISTORICO_VENDAS' | 'SANGRIA' | 'SUPRIMENTO' | 'QUICK_PROD' | 'QUICK_OS'
+  >('CAIXA_STATUS');
 
   // Cash Register State
   const [cashRegister, setCashRegister] = useState<CashRegister | null>(null);
@@ -81,6 +109,37 @@ export const PosModule: React.FC<PosModuleProps> = ({
   const [quickProdCost, setQuickProdCost] = useState('');
   const [quickProdQty, setQuickProdQty] = useState('10');
   const [quickProdCategory, setQuickProdCategory] = useState<'ACESSÓRIO' | 'PEÇA'>('ACESSÓRIO');
+
+  // Quick OS Intake State
+  const [quickOsClientMode, setQuickOsClientMode] = useState<'NEW' | 'EXISTING'>('NEW');
+  const [quickOsClientId, setQuickOsClientId] = useState<string>('');
+  const [quickOsClientName, setQuickOsClientName] = useState<string>('');
+  const [quickOsClientPhone, setQuickOsClientPhone] = useState<string>('');
+  const [quickOsClientDoc, setQuickOsClientDoc] = useState<string>('');
+  const [quickOsBrandId, setQuickOsBrandId] = useState<string>(brands[0]?.id || '');
+  const [quickOsModelId, setQuickOsModelId] = useState<string>('');
+  const [quickOsCustomDevice, setQuickOsCustomDevice] = useState<string>('');
+  const [quickOsDeviceColor, setQuickOsDeviceColor] = useState<string>('');
+  const [quickOsReportedDefect, setQuickOsReportedDefect] = useState<string>('');
+  const [quickOsPassword, setQuickOsPassword] = useState<string>('');
+  const [quickOsTechnicianId, setQuickOsTechnicianId] = useState<string>(
+    users.find((u) => u.role === 'TECHNICIAN')?.id || users[0]?.id || ''
+  );
+  const [quickOsPriority, setQuickOsPriority] = useState<'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'>('NORMAL');
+  const [quickOsTotalEstimate, setQuickOsTotalEstimate] = useState<string>('');
+  const [quickOsDepositAmount, setQuickOsDepositAmount] = useState<string>('');
+  const [quickOsPaymentMethod, setQuickOsPaymentMethod] = useState<'DINHEIRO' | 'PIX' | 'CARTAO_CREDITO' | 'CARTAO_DEBITO'>('PIX');
+  const [quickOsAccessories, setQuickOsAccessories] = useState<string[]>([]);
+  const [quickOsForecastDays, setQuickOsForecastDays] = useState<number>(2);
+  const [isSubmittingQuickOS, setIsSubmittingQuickOS] = useState<boolean>(false);
+  const [quickOsSuccess, setQuickOsSuccess] = useState<{
+    orderNumber: number;
+    id: string;
+    clientName: string;
+    deviceName: string;
+    totalAmount: number;
+    depositAmount: number;
+  } | null>(null);
 
   // Fetch Cash Register
   const fetchCashRegister = async () => {
@@ -305,6 +364,124 @@ export const PosModule: React.FC<PosModuleProps> = ({
     }
   };
 
+  // Quick OS Intake Handler
+  const handleQuickCreateOS = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const selClient = clients.find((c) => c.id === quickOsClientId);
+    const finalClientName = quickOsClientMode === 'EXISTING' ? selClient?.name : quickOsClientName.trim();
+    const finalClientPhone = quickOsClientMode === 'EXISTING' ? selClient?.phone : quickOsClientPhone.trim();
+    const finalClientDoc = quickOsClientMode === 'EXISTING' ? selClient?.document : quickOsClientDoc.trim();
+
+    if (!finalClientName) {
+      alert('Por favor, informe o nome do cliente.');
+      return;
+    }
+    if (!quickOsReportedDefect.trim()) {
+      alert('Por favor, descreva o defeito relatado do aparelho.');
+      return;
+    }
+
+    setIsSubmittingQuickOS(true);
+    try {
+      const selectedBrand = brands.find((b) => b.id === quickOsBrandId);
+      const selectedModel = models.find((m) => m.id === quickOsModelId);
+      const technician =
+        users.find((u) => u.id === quickOsTechnicianId) ||
+        users.find((u) => u.role === 'TECHNICIAN') ||
+        users[0];
+
+      const estDate = new Date();
+      estDate.setDate(estDate.getDate() + quickOsForecastDays);
+
+      const payload = {
+        client_id: quickOsClientMode === 'EXISTING' && quickOsClientId ? quickOsClientId : undefined,
+        client_name: finalClientName,
+        client_phone: finalClientPhone || '(11) 99999-9999',
+        client_document: finalClientDoc || undefined,
+        brand_id: quickOsBrandId || (selectedBrand ? selectedBrand.id : undefined),
+        brand_name: selectedBrand?.name || (quickOsCustomDevice ? 'Geral' : 'Multimarcas'),
+        model_id: quickOsModelId || (selectedModel ? selectedModel.id : undefined),
+        model_name: selectedModel?.name || quickOsCustomDevice.trim() || 'Aparelho Celular',
+        device_color: quickOsDeviceColor.trim() || undefined,
+        device_password: quickOsPassword.trim() || undefined,
+        reported_defect: quickOsReportedDefect.trim(),
+        priority: quickOsPriority,
+        status: 'OPEN',
+        technician_id: technician?.id,
+        technician_name: technician?.name,
+        seller_id: selectedSellerId,
+        seller_name: currentSeller?.name,
+        total_amount: parseFloat(quickOsTotalEstimate) || 0,
+        deposit_amount: parseFloat(quickOsDepositAmount) || 0,
+        payment_method: quickOsPaymentMethod,
+        accessories: quickOsAccessories.length > 0 ? quickOsAccessories.join(', ') : 'Apenas o aparelho',
+        delivery_expected_date: estDate.toISOString(),
+      };
+
+      const res = await fetch('/api/service-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-role': userRole,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const createdOrder = data.order || data;
+        setQuickOsSuccess({
+          orderNumber: createdOrder.order_number || 1005,
+          id: createdOrder.id,
+          clientName: finalClientName,
+          deviceName: `${payload.brand_name} ${payload.model_name}`,
+          totalAmount: parseFloat(quickOsTotalEstimate) || 0,
+          depositAmount: parseFloat(quickOsDepositAmount) || 0,
+        });
+
+        // Reset fields
+        setQuickOsClientName('');
+        setQuickOsClientPhone('');
+        setQuickOsClientDoc('');
+        setQuickOsCustomDevice('');
+        setQuickOsDeviceColor('');
+        setQuickOsReportedDefect('');
+        setQuickOsPassword('');
+        setQuickOsTotalEstimate('');
+        setQuickOsDepositAmount('');
+        setQuickOsAccessories([]);
+
+        onRefreshData();
+      } else {
+        alert('Ocorreu um erro ao salvar a Ordem de Serviço.');
+      }
+    } catch (err) {
+      console.error('Failed to create quick OS:', err);
+      alert('Erro de conexão ao cadastrar a OS.');
+    } finally {
+      setIsSubmittingQuickOS(false);
+    }
+  };
+
+  const DEFECT_PRESETS = [
+    'Tela Quebrada / Sem Toque',
+    'Não Carrega / Conector Frouxo',
+    'Bateria Viciada / Descarrega Rápido',
+    'Não Liga / Travado no Logo',
+    'Molhou / Desoxidação Urgente',
+    'Câmera Traseira / Frontal Embaçada',
+    'Alto-Falante Chiando / Sem Som',
+    'Botão Power / Volume Travado',
+  ];
+
+  const ACCESSORIES_PRESETS = [
+    'Com Capinha',
+    'Com Carregador',
+    'Com Cabo USB',
+    'Gaveta Chip / SD',
+    'Pelicula Aplicada',
+  ];
+
   const changeDue = useMemo(() => {
     const given = parseFloat(amountGiven) || 0;
     return Math.max(0, given - total);
@@ -497,6 +674,20 @@ export const PosModule: React.FC<PosModuleProps> = ({
                     Limpar
                   </button>
                 )}
+                {/* Botão de Nova OS Rápida */}
+                <button
+                  id="pdv-quick-os-btn"
+                  onClick={() => {
+                    setActiveContainerTab('QUICK_OS');
+                    setQuickOsSuccess(null);
+                    setIsContainerMenuOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-lg shadow-sm transition-all border border-indigo-500 hover:border-indigo-400"
+                  title="Cadastrar Nova Ordem de Serviço (Assistência Técnica)"
+                >
+                  <Wrench className="w-3.5 h-3.5 text-indigo-200" />
+                  <span>+ Nova OS</span>
+                </button>
                 {/* Botão de Menu Conteiner Discreto no canto superior direito */}
                 <button
                   id="pdv-container-menu-btn"
@@ -709,6 +900,20 @@ export const PosModule: React.FC<PosModuleProps> = ({
               >
                 <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500" />
                 <span>Suprimento</span>
+              </button>
+              <button
+                onClick={() => {
+                  setActiveContainerTab('QUICK_OS');
+                  setQuickOsSuccess(null);
+                }}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 font-bold whitespace-nowrap border-b-2 transition-all ${
+                  activeContainerTab === 'QUICK_OS'
+                    ? 'border-indigo-600 text-indigo-600 bg-white dark:bg-slate-850'
+                    : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-indigo-600'
+                }`}
+              >
+                <Wrench className="w-3.5 h-3.5 text-indigo-500" />
+                <span>+ Nova OS</span>
               </button>
               <button
                 onClick={() => setActiveContainerTab('QUICK_PROD')}
@@ -954,7 +1159,382 @@ export const PosModule: React.FC<PosModuleProps> = ({
                 </div>
               )}
 
-              {/* Aba 4: Novo Produto Rápido */}
+              {/* Aba 4: Nova Ordem de Serviço Ágil */}
+              {activeContainerTab === 'QUICK_OS' && (
+                <div className="space-y-4">
+                  {quickOsSuccess ? (
+                    <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 border-2 border-emerald-500/30 rounded-2xl space-y-3 animate-in zoom-in-95 duration-150">
+                      <div className="flex items-center gap-2.5 text-emerald-800 dark:text-emerald-300">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <div>
+                          <h4 className="text-sm font-black">
+                            OS #{quickOsSuccess.orderNumber} Gerada com Sucesso!
+                          </h4>
+                          <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                            Equipamento registrado e ordem inserida na fila da assistência.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900 text-xs space-y-1.5">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 dark:text-slate-400">Cliente:</span>
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {quickOsSuccess.clientName}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 dark:text-slate-400">Aparelho:</span>
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {quickOsSuccess.deviceName}
+                          </span>
+                        </div>
+                        {quickOsSuccess.depositAmount > 0 && (
+                          <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
+                            <span>Sinal / Adiantamento:</span>
+                            <span>{formatCurrencyBR(quickOsSuccess.depositAmount)}</span>
+                          </div>
+                        )}
+                        {quickOsSuccess.totalAmount > 0 && (
+                          <div className="flex justify-between text-slate-700 dark:text-slate-300">
+                            <span>Orçamento Estimado:</span>
+                            <span className="font-semibold">{formatCurrencyBR(quickOsSuccess.totalAmount)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          onClick={() => setQuickOsSuccess(null)}
+                          className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+                        >
+                          + Cadastrar Outra OS
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsContainerMenuOpen(false);
+                            onOpenNewOS();
+                          }}
+                          className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl"
+                        >
+                          Assistente
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleQuickCreateOS} className="space-y-3.5">
+                      {/* Header do Form */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                          <Wrench className="w-4 h-4" />
+                          <span className="text-xs font-extrabold">Entrada Ágil de Aparelho</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsContainerMenuOpen(false);
+                            onOpenNewOS();
+                          }}
+                          className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+                        >
+                          Usar Assistente Completo →
+                        </button>
+                      </div>
+
+                      {/* Seletor Tipo de Cliente */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Identificação do Cliente *
+                        </label>
+                        <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setQuickOsClientMode('NEW')}
+                            className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                              quickOsClientMode === 'NEW'
+                                ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            + Novo Cliente Rápido
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setQuickOsClientMode('EXISTING')}
+                            className={`py-1.5 text-xs font-bold rounded-lg transition-all ${
+                              quickOsClientMode === 'EXISTING'
+                                ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            Cliente Cadastrado
+                          </button>
+                        </div>
+
+                        {quickOsClientMode === 'NEW' ? (
+                          <div className="space-y-2 pt-1">
+                            <input
+                              type="text"
+                              required
+                              placeholder="Nome Completo do Cliente *"
+                              value={quickOsClientName}
+                              onChange={(e) => setQuickOsClientName(e.target.value)}
+                              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                required
+                                placeholder="WhatsApp / Fone *"
+                                value={quickOsClientPhone}
+                                onChange={(e) => setQuickOsClientPhone(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                              <input
+                                type="text"
+                                placeholder="CPF (opcional)"
+                                value={quickOsClientDoc}
+                                onChange={(e) => setQuickOsClientDoc(e.target.value)}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <select
+                            value={quickOsClientId}
+                            onChange={(e) => setQuickOsClientId(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">Selecione o Cliente...</option>
+                            {clients.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name} {c.phone ? `(${c.phone})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      {/* Equipamento / Marca / Modelo */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Aparelho / Equipamento *
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={quickOsBrandId}
+                            onChange={(e) => {
+                              setQuickOsBrandId(e.target.value);
+                              setQuickOsModelId('');
+                            }}
+                            className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold outline-none"
+                          >
+                            <option value="">Marca...</option>
+                            {brands.map((b) => (
+                              <option key={b.id} value={b.id}>
+                                {b.name}
+                              </option>
+                            ))}
+                          </select>
+
+                          {quickOsBrandId && models.filter((m) => m.brand_id === quickOsBrandId).length > 0 ? (
+                            <select
+                              value={quickOsModelId}
+                              onChange={(e) => setQuickOsModelId(e.target.value)}
+                              className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold outline-none"
+                            >
+                              <option value="">Modelo...</option>
+                              {models
+                                .filter((m) => m.brand_id === quickOsBrandId)
+                                .map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.name}
+                                  </option>
+                                ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              placeholder="Modelo (ex: iPhone 13)"
+                              value={quickOsCustomDevice}
+                              onChange={(e) => setQuickOsCustomDevice(e.target.value)}
+                              className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <input
+                            type="text"
+                            placeholder="Cor (ex: Preto, Grafite)"
+                            value={quickOsDeviceColor}
+                            onChange={(e) => setQuickOsDeviceColor(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs outline-none"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Senha / PIN (ex: 1234)"
+                            value={quickOsPassword}
+                            onChange={(e) => setQuickOsPassword(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Defeito Relatado */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Defeito Relatado pelo Cliente *
+                        </label>
+                        {/* Chips de Atalho Rápido */}
+                        <div className="flex flex-wrap gap-1">
+                          {DEFECT_PRESETS.slice(0, 4).map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => {
+                                setQuickOsReportedDefect((prev) =>
+                                  prev ? `${prev}, ${preset}` : preset
+                                );
+                              }}
+                              className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-md border border-slate-200 dark:border-slate-700 transition-colors"
+                            >
+                              + {preset.split('/')[0].trim()}
+                            </button>
+                          ))}
+                        </div>
+                        <textarea
+                          required
+                          rows={2}
+                          placeholder="Descreva o problema relatado..."
+                          value={quickOsReportedDefect}
+                          onChange={(e) => setQuickOsReportedDefect(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                        />
+                      </div>
+
+                      {/* Acessórios Deixados */}
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Acessórios Deixados
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {ACCESSORIES_PRESETS.map((acc) => {
+                            const isChecked = quickOsAccessories.includes(acc);
+                            return (
+                              <button
+                                key={acc}
+                                type="button"
+                                onClick={() => {
+                                  if (isChecked) {
+                                    setQuickOsAccessories(quickOsAccessories.filter((a) => a !== acc));
+                                  } else {
+                                    setQuickOsAccessories([...quickOsAccessories, acc]);
+                                  }
+                                }}
+                                className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all ${
+                                  isChecked
+                                    ? 'bg-indigo-600 border-indigo-600 text-white'
+                                    : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                                }`}
+                              >
+                                {isChecked ? '✓ ' : '+ '}
+                                {acc}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Valores, Sinal e Previsão */}
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                            Orçamento Previsto (R$)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="0,00"
+                            value={quickOsTotalEstimate}
+                            onChange={(e) => setQuickOsTotalEstimate(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                            Sinal / Entrada (R$)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="0,00"
+                            value={quickOsDepositAmount}
+                            onChange={(e) => setQuickOsDepositAmount(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-emerald-600 dark:text-emerald-400 outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Técnico Responsável & Previsão */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                            Técnico Responsável
+                          </label>
+                          <select
+                            value={quickOsTechnicianId}
+                            onChange={(e) => setQuickOsTechnicianId(e.target.value)}
+                            className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs outline-none"
+                          >
+                            {users.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name} ({u.role === 'TECHNICIAN' ? 'Técnico' : u.role})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                            Previsão de Entrega
+                          </label>
+                          <select
+                            value={quickOsForecastDays}
+                            onChange={(e) => setQuickOsForecastDays(parseInt(e.target.value))}
+                            className="w-full px-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs outline-none"
+                          >
+                            <option value={1}>1 dia (Amanhã)</option>
+                            <option value={2}>2 dias úteis</option>
+                            <option value={3}>3 dias úteis</option>
+                            <option value={5}>5 dias úteis</option>
+                            <option value={7}>7 dias úteis</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Botão de Envio */}
+                      <button
+                        type="submit"
+                        disabled={isSubmittingQuickOS}
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2 mt-2"
+                      >
+                        {isSubmittingQuickOS ? (
+                          <span>Cadastrando OS...</span>
+                        ) : (
+                          <>
+                            <Wrench className="w-4 h-4" />
+                            <span>Salvar e Gerar Ordem de Serviço</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* Aba 5: Novo Produto Rápido */}
               {activeContainerTab === 'QUICK_PROD' && (
                 <form onSubmit={handleQuickCreateProduct} className="space-y-2.5">
                   <div>
@@ -1140,6 +1720,7 @@ export const PosModule: React.FC<PosModuleProps> = ({
         onClose={() => setIsPrintingReceipt(false)}
         client={clients.find((c) => c.id === (lastCompletedSale?.client_id || selectedClientId)) || null}
         amountGiven={amountGiven ? parseFloat(amountGiven) : null}
+        storeSettings={storeSettings}
       />
     </div>
   );
