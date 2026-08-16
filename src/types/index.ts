@@ -72,6 +72,44 @@ export interface Supplier {
   notes?: string;
 }
 
+export interface StockInwardItem {
+  id: string;
+  product_id?: string;
+  product_name: string;
+  sku?: string;
+  barcode?: string;
+  category: 'PEÇA' | 'ACESSÓRIO' | 'OUTROS';
+  quantity: number;
+  cost_price: number;
+  current_selling_price?: number;
+  new_selling_price: number;
+  markup_percentage?: number;
+  total_cost: number;
+  is_new_product?: boolean;
+}
+
+export interface StockInwardInvoice {
+  id: string;
+  invoice_number: string;
+  series?: string;
+  access_key?: string;
+  issue_date: string;
+  entry_date: string;
+  supplier_id?: string;
+  supplier_name: string;
+  supplier_cnpj?: string;
+  items: StockInwardItem[];
+  total_items: number;
+  total_units: number;
+  total_cost_amount: number;
+  notes?: string;
+  payment_status: 'PENDING' | 'PAID';
+  due_date?: string;
+  create_financial_payable?: boolean;
+  registered_by: string;
+  created_at: string;
+}
+
 export type ServiceOrderStatus =
   | 'OPEN'
   | 'ANALYSIS_BOARD' // "foi para analise de placa"

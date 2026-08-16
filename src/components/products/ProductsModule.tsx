@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Package,
   Plus,
@@ -12,9 +12,16 @@ import {
   Edit2,
   X,
   TrendingUp,
+  FileText,
+  FileCode,
+  Sparkles,
+  History,
+  ArrowDownToLine,
 } from 'lucide-react';
-import { Product, Supplier, Brand } from '../../types';
+import { Product, Supplier, Brand, StockInwardInvoice } from '../../types';
 import { formatCurrencyBR } from '../../lib/formatters';
+import { StockInwardModal } from './StockInwardModal';
+import { StockInwardHistoryModal } from './StockInwardHistoryModal';
 
 interface ProductsModuleProps {
   products: Product[];
@@ -34,8 +41,11 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isStockInwardModalOpen, setIsStockInwardModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [invoices, setInvoices] = useState<StockInwardInvoice[]>([]);
 
-  // Form State
+  // Form State for Manual Single Product
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [barcode, setBarcode] = useState('');
@@ -49,6 +59,30 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isAdmin = userRole === 'ADMIN';
+
+  // Fetch Invoices History
+  const fetchInvoices = async () => {
+    try {
+      const res = await fetch('/api/stock-inward-invoices', {
+        headers: { 'x-user-role': userRole },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setInvoices(data.invoices || data.stockInvoices || []);
+      }
+    } catch (err) {
+      console.error('Error fetching stock inward invoices:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchInvoices();
+  }, []);
+
+  const handleInwardSuccess = () => {
+    onRefresh();
+    fetchInvoices();
+  };
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
@@ -138,7 +172,7 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
-      {/* Header */}
+      {/* Header with Stock Inward Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-emerald-600 text-white rounded-xl shadow-md">
@@ -149,18 +183,73 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
               Produtos & Estoque de Peças
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Peças de reposição, telas, baterias e acessórios com controle de estoque
+              Peças de reposição, telas, baterias e acessórios com entrada inteligente por Nota Fiscal
             </p>
           </div>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          + Novo Produto / Peça
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Main Inward Action Button */}
+          <button
+            onClick={() => setIsStockInwardModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-600/25 transition-all"
+            title="Importar XML da SEFAZ ou digitar romaneio de compra"
+          >
+            <ArrowDownToLine className="w-4 h-4 text-emerald-200" />
+            <span>📥 Entrada por Nota Fiscal / XML</span>
+          </button>
+
+          {/* History Button */}
+          <button
+            onClick={() => setIsHistoryModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all"
+            title="Ver notas fiscais e romaneios lançados"
+          >
+            <History className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            <span>Notas ({invoices.length})</span>
+          </button>
+
+          {/* Single Item Add */}
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl shadow-sm transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Item Avulso</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Stock Inward Fast Banner / Callout */}
+      <div className="p-4 bg-gradient-to-r from-emerald-900/10 via-teal-900/10 to-slate-900/5 dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-slate-900/40 border border-emerald-300/60 dark:border-emerald-800/60 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-sm">
+            <FileCode className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-900 dark:text-white">
+                Chegou mercadoria nova na assistência?
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.2 bg-emerald-600 text-white rounded-full">
+                NF-e XML & Romaneio
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+              Dê entrada em lote via XML da NF-e com cálculo automático de margem de lucro e lançamento no Contas a Pagar.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+          <button
+            onClick={() => setIsStockInwardModalOpen(true)}
+            className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Dar Entrada na Nota</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -248,79 +337,97 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
               <tr>
                 <th className="py-3 px-4">SKU / Produto</th>
                 <th className="py-3 px-4">Categoria</th>
-                {isAdmin && <th className="py-3 px-4">Preço Custo [Admin]</th>}
-                <th className="py-3 px-4">Preço Venda</th>
-                {isAdmin && <th className="py-3 px-4">Margem Lucro</th>}
-                <th className="py-3 px-4 text-center">Estoque Atual</th>
-                <th className="py-3 px-4 text-right">Ações</th>
+                <th className="py-3 px-4">Estoque Atual</th>
+                {isAdmin && <th className="py-3 px-4">Custo Unit.</th>}
+                <th className="py-3 px-4">Preço de Venda</th>
+                {isAdmin && <th className="py-3 px-4">Fornecedor</th>}
+                <th className="py-3 px-4 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
-              {filteredProducts.length > 0 ? (
-                filteredProducts.map((prod) => {
-                  const markup =
-                    isAdmin && prod.cost_price && prod.cost_price > 0
-                      ? (((prod.selling_price - prod.cost_price) / prod.cost_price) * 100).toFixed(0)
-                      : null;
-                  const isLow = prod.stock_quantity <= prod.min_stock;
-
+              {filteredProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-slate-400 text-xs">
+                    Nenhum produto ou peça encontrado com os filtros atuais.
+                  </td>
+                </tr>
+              ) : (
+                filteredProducts.map((p) => {
+                  const isLow = p.stock_quantity <= p.min_stock;
                   return (
                     <tr
-                      key={prod.id}
-                      className="hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition-colors"
+                      key={p.id}
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-750 transition-colors"
                     >
-                      <td className="py-3.5 px-4">
-                        <span className="text-[10px] font-mono text-slate-400 block">{prod.sku}</span>
-                        <span className="font-bold text-slate-900 dark:text-white block mt-0.5">
-                          {prod.name}
-                        </span>
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-900 dark:text-white">{p.name}</div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                          <span>SKU: {p.sku}</span>
+                          {p.barcode && <span>• EAN: {p.barcode}</span>}
+                        </div>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-semibold text-[10px]">
-                          {prod.category}
-                        </span>
-                      </td>
-
-                      {isAdmin && (
-                        <td className="py-3.5 px-4 font-mono text-slate-600 dark:text-slate-300">
-                          {formatCurrencyBR(prod.cost_price)}
-                        </td>
-                      )}
-
-                      <td className="py-3.5 px-4 font-black text-slate-900 dark:text-white">
-                        {formatCurrencyBR(prod.selling_price)}
-                      </td>
-
-                      {isAdmin && (
-                        <td className="py-3.5 px-4">
-                          {markup ? (
-                            <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[11px]">
-                              +{markup}%
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 text-[10px]">--</span>
-                          )}
-                        </td>
-                      )}
-
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3 px-4">
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                            isLow
-                              ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                          className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            p.category === 'PEÇA'
+                              ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                              : p.category === 'ACESSÓRIO'
+                              ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                           }`}
                         >
-                          {isLow && <AlertTriangle className="w-3 h-3" />}
-                          {prod.stock_quantity} {prod.unit}
+                          {p.category}
                         </span>
                       </td>
 
-                      <td className="py-3.5 px-4 text-right">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-black text-sm ${
+                              isLow
+                                ? 'text-rose-600 dark:text-rose-400 font-extrabold'
+                                : 'text-slate-900 dark:text-white'
+                            }`}
+                          >
+                            {p.stock_quantity} {p.unit}
+                          </span>
+                          {isLow && (
+                            <span
+                              className="p-1 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-md"
+                              title="Abaixo do estoque mínimo!"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400">Min: {p.min_stock} un</span>
+                      </td>
+
+                      {isAdmin && (
+                        <td className="py-3 px-4">
+                          <span className="font-semibold text-slate-600 dark:text-slate-300">
+                            {p.cost_price ? formatCurrencyBR(p.cost_price) : 'R$ 0,00'}
+                          </span>
+                        </td>
+                      )}
+
+                      <td className="py-3 px-4">
+                        <span className="font-black text-emerald-600 dark:text-emerald-400">
+                          {formatCurrencyBR(p.selling_price)}
+                        </span>
+                      </td>
+
+                      {isAdmin && (
+                        <td className="py-3 px-4 text-slate-500 text-[11px]">
+                          {p.supplier_name || '—'}
+                        </td>
+                      )}
+
+                      <td className="py-3 px-4 text-center">
                         <button
-                          onClick={() => handleDeleteProduct(prod.id, prod.name)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                          onClick={() => handleDeleteProduct(p.id, p.name)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors"
                           title="Excluir produto"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -329,50 +436,87 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
                     </tr>
                   );
                 })
-              ) : (
-                <tr>
-                  <td
-                    colSpan={isAdmin ? 7 : 5}
-                    className="py-12 text-center text-slate-400 text-xs italic"
-                  >
-                    Nenhum produto cadastrado com os filtros aplicados.
-                  </td>
-                </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Create Product Modal */}
+      {/* Stock Inward Entry Modal */}
+      <StockInwardModal
+        isOpen={isStockInwardModalOpen}
+        onClose={() => setIsStockInwardModalOpen(false)}
+        products={products}
+        suppliers={suppliers}
+        userRole={userRole}
+        onSuccess={handleInwardSuccess}
+      />
+
+      {/* Stock Inward History Modal */}
+      <StockInwardHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        invoices={invoices}
+        onOpenNewInward={() => setIsStockInwardModalOpen(true)}
+      />
+
+      {/* Single Product Manual Create Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
-              <h3 className="text-base font-black text-slate-900 dark:text-white">
-                Cadastrar Novo Produto ou Peça
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 w-full max-w-lg rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h2 className="font-bold text-slate-900 dark:text-white">
+                Cadastrar Novo Produto / Peça
+              </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateProduct} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateProduct} className="p-6 space-y-4 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Nome do Item *
+                  Nome do Produto / Descrição da Peça *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Tela Frontal iPhone 12 Incell, Bateria Galaxy S20..."
+                  placeholder="Ex: Tela Display iPhone 13 Incell"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Código SKU
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: TEL-IPH13"
+                    value={sku}
+                    onChange={(e) => setSku(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Código de Barras (EAN)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="789..."
+                    value={barcode}
+                    onChange={(e) => setBarcode(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -393,15 +537,17 @@ export const ProductsModule: React.FC<ProductsModuleProps> = ({
 
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Código SKU / Barras
+                    Unidade
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: TEL-IP12-INC"
-                    value={sku}
-                    onChange={(e) => setSku(e.target.value)}
+                  <select
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white outline-none"
-                  />
+                  >
+                    <option value="UN">Unidade (UN)</option>
+                    <option value="PAR">Par</option>
+                    <option value="METRO">Metro</option>
+                  </select>
                 </div>
               </div>
 

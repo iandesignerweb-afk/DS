@@ -77,6 +77,44 @@ export interface Supplier {
   notes?: string;
 }
 
+export interface StockInwardItem {
+  id: string;
+  product_id?: string;
+  product_name: string;
+  sku?: string;
+  barcode?: string;
+  category: 'PEÇA' | 'ACESSÓRIO' | 'OUTROS';
+  quantity: number;
+  cost_price: number;
+  current_selling_price?: number;
+  new_selling_price: number;
+  markup_percentage?: number;
+  total_cost: number;
+  is_new_product?: boolean;
+}
+
+export interface StockInwardInvoice {
+  id: string;
+  invoice_number: string;
+  series?: string;
+  access_key?: string;
+  issue_date: string;
+  entry_date: string;
+  supplier_id?: string;
+  supplier_name: string;
+  supplier_cnpj?: string;
+  items: StockInwardItem[];
+  total_items: number;
+  total_units: number;
+  total_cost_amount: number;
+  notes?: string;
+  payment_status: 'PENDING' | 'PAID';
+  due_date?: string;
+  create_financial_payable?: boolean;
+  registered_by: string;
+  created_at: string;
+}
+
 export type ServiceOrderStatus =
   | 'OPEN'
   | 'ANALYSIS_BOARD' // "foi para analise de placa"
@@ -842,6 +880,113 @@ const financialAccounts: FinancialAccount[] = [
   },
 ];
 
+const stockInwardInvoices: StockInwardInvoice[] = [
+  {
+    id: 'nfe_001',
+    invoice_number: 'NF-e 004821',
+    series: '1',
+    access_key: '35260812345678000190550010000048211987654321',
+    issue_date: new Date(Date.now() - 6 * 86400000).toISOString().split('T')[0],
+    entry_date: new Date(Date.now() - 6 * 86400000).toISOString(),
+    supplier_id: 'sup_1',
+    supplier_name: 'Mega Peças Telas & Displays SP',
+    supplier_cnpj: '12.345.678/0001-99',
+    items: [
+      {
+        id: 'item_1',
+        product_id: 'prod_1',
+        product_name: 'Tela Display iPhone 13 Incell Premium',
+        sku: 'TEL-IPH13-INC',
+        barcode: '789123456001',
+        category: 'PEÇA',
+        quantity: 5,
+        cost_price: 180.0,
+        current_selling_price: 420.0,
+        new_selling_price: 420.0,
+        markup_percentage: 133,
+        total_cost: 900.0,
+        is_new_product: false,
+      },
+      {
+        id: 'item_2',
+        product_id: 'prod_4',
+        product_name: 'Tela Display Galaxy A54 5G Original com Aro',
+        sku: 'TEL-SMA54-ARO',
+        barcode: '789123456004',
+        category: 'PEÇA',
+        quantity: 4,
+        cost_price: 210.0,
+        current_selling_price: 460.0,
+        new_selling_price: 460.0,
+        markup_percentage: 119,
+        total_cost: 840.0,
+        is_new_product: false,
+      },
+    ],
+    total_items: 2,
+    total_units: 9,
+    total_cost_amount: 1740.0,
+    notes: 'Entrada de reposição de telas de alta rotatividade.',
+    payment_status: 'PAID',
+    due_date: new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0],
+    create_financial_payable: true,
+    registered_by: 'Carlos Mendes (Admin)',
+    created_at: new Date(Date.now() - 6 * 86400000).toISOString(),
+  },
+  {
+    id: 'nfe_002',
+    invoice_number: 'NF-e 009210',
+    series: '1',
+    access_key: '35260898765432000188550010000092101123456789',
+    issue_date: new Date(Date.now() - 2 * 86400000).toISOString().split('T')[0],
+    entry_date: new Date(Date.now() - 2 * 86400000).toISOString(),
+    supplier_id: 'sup_3',
+    supplier_name: 'TechCell Acessórios e Películas',
+    supplier_cnpj: '98.765.432/0001-11',
+    items: [
+      {
+        id: 'item_3',
+        product_id: 'prod_6',
+        product_name: 'Carregador Turbo 20W USB-C Dual Cell Pro',
+        sku: 'CHG-20W-USBC',
+        barcode: '789123456006',
+        category: 'ACESSÓRIO',
+        quantity: 20,
+        cost_price: 18.0,
+        current_selling_price: 79.9,
+        new_selling_price: 79.9,
+        markup_percentage: 343,
+        total_cost: 360.0,
+        is_new_product: false,
+      },
+      {
+        id: 'item_4',
+        product_id: 'prod_8',
+        product_name: 'Película 3D Cerâmica Fosca Anti-Reflexo',
+        sku: 'PEL-3D-CERAMIC',
+        barcode: '789123456008',
+        category: 'ACESSÓRIO',
+        quantity: 40,
+        cost_price: 4.5,
+        current_selling_price: 35.0,
+        new_selling_price: 35.0,
+        markup_percentage: 677,
+        total_cost: 180.0,
+        is_new_product: false,
+      },
+    ],
+    total_items: 2,
+    total_units: 60,
+    total_cost_amount: 540.0,
+    notes: 'Lote de carregadores e películas cerâmica.',
+    payment_status: 'PENDING',
+    due_date: new Date(Date.now() + 8 * 86400000).toISOString().split('T')[0],
+    create_financial_payable: true,
+    registered_by: 'Carlos Mendes (Admin)',
+    created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+  },
+];
+
 // --- Role & Permissions Helper Middleware ---
 function getClientRole(req: Request): UserRole {
   const headerRole = req.headers['x-user-role'] as string;
@@ -1256,6 +1401,181 @@ async function startServer() {
     const idx = products.findIndex((p) => p.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Produto não encontrado.' });
     products.splice(idx, 1);
+    res.json({ success: true });
+  });
+
+  // 6.1 Stock Inward via Invoice / NF-e / Romaneio
+  app.get('/api/stock-inward-invoices', (req, res) => {
+    const sorted = [...stockInwardInvoices].sort(
+      (a, b) => new Date(b.created_at || b.entry_date).getTime() - new Date(a.created_at || a.entry_date).getTime()
+    );
+    res.json({ invoices: sorted, stockInvoices: sorted });
+  });
+
+  app.post('/api/stock-inward-invoices', requireAdmin, (req, res) => {
+    const {
+      invoice_number,
+      series,
+      access_key,
+      issue_date,
+      entry_date,
+      supplier_id,
+      supplier_name,
+      supplier_cnpj,
+      items,
+      notes,
+      payment_status,
+      due_date,
+      create_financial_payable,
+    } = req.body;
+
+    if (!invoice_number?.trim() || !supplier_name?.trim() || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        error: 'Número da nota/documento, fornecedor e ao menos 1 item são obrigatórios.',
+      });
+    }
+
+    const processedItems: StockInwardItem[] = [];
+    let totalCost = 0;
+    let totalUnits = 0;
+
+    // Process each item and update stock
+    for (const rawItem of items) {
+      const qty = Math.max(1, Number(rawItem.quantity) || 1);
+      const cost = Math.max(0, Number(rawItem.cost_price) || 0);
+      const newSell = Math.max(0, Number(rawItem.new_selling_price) || Number(rawItem.current_selling_price) || cost * 1.8);
+      const itemSubtotal = qty * cost;
+      totalCost += itemSubtotal;
+      totalUnits += qty;
+
+      let matchedProduct = rawItem.product_id ? products.find((p) => p.id === rawItem.product_id) : undefined;
+
+      // If no product_id, try match by barcode or exact name
+      if (!matchedProduct && rawItem.barcode) {
+        matchedProduct = products.find((p) => p.barcode && p.barcode.trim() === rawItem.barcode.trim());
+      }
+      if (!matchedProduct && rawItem.product_name) {
+        matchedProduct = products.find(
+          (p) => p.name.toLowerCase().trim() === rawItem.product_name.toLowerCase().trim()
+        );
+      }
+
+      if (matchedProduct) {
+        // Update existing product: increment stock quantity and update cost and selling prices
+        matchedProduct.stock_quantity += qty;
+        if (cost > 0) matchedProduct.cost_price = cost;
+        if (newSell > 0) matchedProduct.selling_price = newSell;
+        if (supplier_id && !matchedProduct.supplier_id) {
+          matchedProduct.supplier_id = supplier_id;
+          matchedProduct.supplier_name = supplier_name;
+        }
+
+        processedItems.push({
+          id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          product_id: matchedProduct.id,
+          product_name: matchedProduct.name,
+          sku: matchedProduct.sku,
+          barcode: matchedProduct.barcode,
+          category: matchedProduct.category,
+          quantity: qty,
+          cost_price: cost,
+          current_selling_price: matchedProduct.selling_price,
+          new_selling_price: newSell,
+          markup_percentage: cost > 0 ? Math.round(((newSell - cost) / cost) * 100) : 100,
+          total_cost: itemSubtotal,
+          is_new_product: false,
+        });
+      } else {
+        // Create brand new product
+        const newProdId = `prod_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        const newSku = rawItem.sku?.trim() || `SKU-${Date.now().toString().slice(-6)}`;
+        const newProd: Product = {
+          id: newProdId,
+          name: rawItem.product_name.trim(),
+          sku: newSku,
+          barcode: rawItem.barcode?.trim() || '',
+          category: rawItem.category || 'ACESSÓRIO',
+          cost_price: cost,
+          selling_price: newSell > 0 ? newSell : (cost > 0 ? cost * 1.8 : 50.0),
+          stock_quantity: qty,
+          min_stock: 3,
+          supplier_id: supplier_id || undefined,
+          supplier_name: supplier_name || undefined,
+          unit: rawItem.unit || 'UN',
+        };
+        products.push(newProd);
+
+        processedItems.push({
+          id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          product_id: newProd.id,
+          product_name: newProd.name,
+          sku: newProd.sku,
+          barcode: newProd.barcode,
+          category: newProd.category,
+          quantity: qty,
+          cost_price: cost,
+          current_selling_price: newProd.selling_price,
+          new_selling_price: newSell,
+          markup_percentage: cost > 0 ? Math.round(((newSell - cost) / cost) * 100) : 100,
+          total_cost: itemSubtotal,
+          is_new_product: true,
+        });
+      }
+    }
+
+    const newInvoice: StockInwardInvoice = {
+      id: `nfe_${Date.now()}`,
+      invoice_number: invoice_number.trim(),
+      series: series?.trim() || '1',
+      access_key: access_key?.trim() || undefined,
+      issue_date: issue_date || new Date().toISOString().split('T')[0],
+      entry_date: entry_date || new Date().toISOString(),
+      supplier_id: supplier_id || undefined,
+      supplier_name: supplier_name.trim(),
+      supplier_cnpj: supplier_cnpj?.trim() || undefined,
+      items: processedItems,
+      total_items: processedItems.length,
+      total_units: totalUnits,
+      total_cost_amount: totalCost,
+      notes: notes?.trim() || undefined,
+      payment_status: payment_status || 'PENDING',
+      due_date: due_date || undefined,
+      create_financial_payable: !!create_financial_payable,
+      registered_by: 'Carlos Mendes (Admin)',
+      created_at: new Date().toISOString(),
+    };
+
+    stockInwardInvoices.unshift(newInvoice);
+
+    // If requested, generate account payable in Financial Accounts
+    if (create_financial_payable && totalCost > 0) {
+      financialAccounts.unshift({
+        id: `fin_p_${Date.now()}`,
+        type: 'PAYABLE',
+        description: `Entrada de Estoque / ${newInvoice.invoice_number} (${supplier_name})`,
+        category: 'FORNECEDOR',
+        amount: totalCost,
+        due_date: due_date || new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+        status: payment_status === 'PAID' ? 'PAID' : 'PENDING',
+        payment_date: payment_status === 'PAID' ? new Date().toISOString().split('T')[0] : undefined,
+        entity_name: supplier_name.trim(),
+        notes: `Gerado automaticamente pela entrada de estoque ${newInvoice.invoice_number}. Total de ${totalUnits} peças/acessórios.`,
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      invoice: newInvoice,
+      totalUnits,
+      totalCost,
+      itemsProcessed: processedItems.length,
+    });
+  });
+
+  app.delete('/api/stock-inward-invoices/:id', requireAdmin, (req, res) => {
+    const idx = stockInwardInvoices.findIndex((inv) => inv.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: 'Nota de entrada não encontrada.' });
+    stockInwardInvoices.splice(idx, 1);
     res.json({ success: true });
   });
 
