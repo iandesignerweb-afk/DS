@@ -6,17 +6,20 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
-export type UserRole = 'ADMIN' | 'SELLER';
+export type UserRole = 'ADMIN' | 'SELLER' | 'TECHNICIAN' | 'CASHIER';
 
 export type ServiceOrderStatus =
+  | 'OPEN'
+  | 'ANALYSIS_BOARD'
+  | 'WAITING_PARTS'
+  | 'IN_PROGRESS'
+  | 'FINISHED_READY'
+  | 'WAITING_PICKUP'
+  | 'DELIVERED'
+  | 'CANCELLED'
   | 'PENDING_EVALUATION'
   | 'BUDGET_READY'
   | 'APPROVED'
-  | 'IN_PROGRESS'
-  | 'WAITING_PARTS'
-  | 'FINISHED_READY'
-  | 'DELIVERED'
-  | 'CANCELLED'
   | 'REJECTED';
 
 export type ServiceOrderPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
@@ -28,13 +31,20 @@ export type PaymentMethod =
   | 'PIX'
   | 'TRANSFER'
   | 'BOLETO'
-  | 'OTHER';
+  | 'OTHER'
+  | 'DINHEIRO'
+  | 'CARTAO_CREDITO'
+  | 'CARTAO_DEBITO'
+  | 'OUTROS';
 
 export type CashMovementType =
   | 'SUPPLY'
   | 'BLEED'
+  | 'SALE'
   | 'SALE_IN'
+  | 'OS_PAYMENT'
   | 'OS_IN'
+  | 'EXPENSE'
   | 'EXPENSE_OUT';
 
 export interface Database {
@@ -68,6 +78,8 @@ export interface Database {
           email: string;
           phone: string | null;
           is_active: boolean;
+          commission_percentage: number;
+          avatar_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -78,6 +90,8 @@ export interface Database {
           email: string;
           phone?: string | null;
           is_active?: boolean;
+          commission_percentage?: number;
+          avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -88,6 +102,8 @@ export interface Database {
           email?: string;
           phone?: string | null;
           is_active?: boolean;
+          commission_percentage?: number;
+          avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -158,18 +174,21 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          icon: string | null;
           is_active: boolean;
           created_at: string;
         };
         Insert: {
           id?: string;
           name: string;
+          icon?: string | null;
           is_active?: boolean;
           created_at?: string;
         };
         Update: {
           id?: string;
           name?: string;
+          icon?: string | null;
           is_active?: boolean;
           created_at?: string;
         };
@@ -180,6 +199,7 @@ export interface Database {
           brand_id: string;
           name: string;
           model_number: string | null;
+          device_type: string;
           is_active: boolean;
           created_at: string;
         };
@@ -188,6 +208,7 @@ export interface Database {
           brand_id: string;
           name: string;
           model_number?: string | null;
+          device_type?: string;
           is_active?: boolean;
           created_at?: string;
         };
@@ -196,6 +217,7 @@ export interface Database {
           brand_id?: string;
           name?: string;
           model_number?: string | null;
+          device_type?: string;
           is_active?: boolean;
           created_at?: string;
         };
@@ -274,6 +296,8 @@ export interface Database {
           name: string;
           sku: string | null;
           barcode: string | null;
+          category: string;
+          unit: string;
           cost_price: number;
           sale_price: number;
           min_stock: number;
@@ -291,6 +315,8 @@ export interface Database {
           name: string;
           sku?: string | null;
           barcode?: string | null;
+          category?: string;
+          unit?: string;
           cost_price?: number;
           sale_price: number;
           min_stock?: number;
@@ -308,6 +334,8 @@ export interface Database {
           name?: string;
           sku?: string | null;
           barcode?: string | null;
+          category?: string;
+          unit?: string;
           cost_price?: number;
           sale_price?: number;
           min_stock?: number;
@@ -323,6 +351,8 @@ export interface Database {
           name: string;
           description: string | null;
           standard_price: number;
+          category: string;
+          warranty_days: number;
           estimated_minutes: number;
           is_active: boolean;
           created_at: string;
@@ -333,6 +363,8 @@ export interface Database {
           name: string;
           description?: string | null;
           standard_price: number;
+          category?: string;
+          warranty_days?: number;
           estimated_minutes?: number;
           is_active?: boolean;
           created_at?: string;
@@ -343,6 +375,8 @@ export interface Database {
           name?: string;
           description?: string | null;
           standard_price?: number;
+          category?: string;
+          warranty_days?: number;
           estimated_minutes?: number;
           is_active?: boolean;
           created_at?: string;
@@ -387,6 +421,7 @@ export interface Database {
           phone_model_id: string | null;
           device_name: string | null;
           imei: string | null;
+          imei_2: string | null;
           serial_number: string | null;
           device_password: string | null;
           device_color: string | null;
@@ -394,12 +429,18 @@ export interface Database {
           accessories_left: string | null;
           reported_defect: string;
           technical_diagnosis: string | null;
+          is_motherboard_analysis: boolean;
           status: ServiceOrderStatus;
           priority: ServiceOrderPriority;
           total_services: number;
           total_products: number;
           discount: number;
+          addition: number;
           total_amount: number;
+          deposit_amount: number;
+          remaining_amount: number;
+          payment_method: string | null;
+          payment_status: string;
           seller_id: string | null;
           technician_id: string | null;
           entry_date: string;
@@ -419,6 +460,7 @@ export interface Database {
           phone_model_id?: string | null;
           device_name?: string | null;
           imei?: string | null;
+          imei_2?: string | null;
           serial_number?: string | null;
           device_password?: string | null;
           device_color?: string | null;
@@ -426,12 +468,18 @@ export interface Database {
           accessories_left?: string | null;
           reported_defect: string;
           technical_diagnosis?: string | null;
+          is_motherboard_analysis?: boolean;
           status?: ServiceOrderStatus;
           priority?: ServiceOrderPriority;
           total_services?: number;
           total_products?: number;
           discount?: number;
+          addition?: number;
           total_amount?: number;
+          deposit_amount?: number;
+          remaining_amount?: number;
+          payment_method?: string | null;
+          payment_status?: string;
           seller_id?: string | null;
           technician_id?: string | null;
           entry_date?: string;
@@ -451,6 +499,7 @@ export interface Database {
           phone_model_id?: string | null;
           device_name?: string | null;
           imei?: string | null;
+          imei_2?: string | null;
           serial_number?: string | null;
           device_password?: string | null;
           device_color?: string | null;
@@ -458,12 +507,18 @@ export interface Database {
           accessories_left?: string | null;
           reported_defect?: string;
           technical_diagnosis?: string | null;
+          is_motherboard_analysis?: boolean;
           status?: ServiceOrderStatus;
           priority?: ServiceOrderPriority;
           total_services?: number;
           total_products?: number;
           discount?: number;
+          addition?: number;
           total_amount?: number;
+          deposit_amount?: number;
+          remaining_amount?: number;
+          payment_method?: string | null;
+          payment_status?: string;
           seller_id?: string | null;
           technician_id?: string | null;
           entry_date?: string;
@@ -623,7 +678,10 @@ export interface Database {
           subtotal: number;
           discount: number;
           total_amount: number;
+          payment_method: string;
           payment_status: string;
+          commission_percentage: number;
+          commission_amount: number;
           notes: string | null;
           created_by: string | null;
           created_at: string;
@@ -636,7 +694,10 @@ export interface Database {
           subtotal?: number;
           discount?: number;
           total_amount?: number;
+          payment_method?: string;
           payment_status?: string;
+          commission_percentage?: number;
+          commission_amount?: number;
           notes?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -649,7 +710,10 @@ export interface Database {
           subtotal?: number;
           discount?: number;
           total_amount?: number;
+          payment_method?: string;
           payment_status?: string;
+          commission_percentage?: number;
+          commission_amount?: number;
           notes?: string | null;
           created_by?: string | null;
           created_at?: string;
@@ -927,6 +991,198 @@ export interface Database {
           created_at?: string;
         };
       };
+      stock_inward_invoices: {
+        Row: {
+          id: string;
+          invoice_number: string;
+          series: string | null;
+          access_key: string | null;
+          issue_date: string;
+          entry_date: string;
+          supplier_id: string | null;
+          supplier_name: string;
+          supplier_cnpj: string | null;
+          total_items: number;
+          total_units: number;
+          total_cost_amount: number;
+          notes: string | null;
+          payment_status: 'PENDING' | 'PAID';
+          due_date: string | null;
+          create_financial_payable: boolean;
+          registered_by: string;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          invoice_number: string;
+          series?: string | null;
+          access_key?: string | null;
+          issue_date: string;
+          entry_date?: string;
+          supplier_id?: string | null;
+          supplier_name: string;
+          supplier_cnpj?: string | null;
+          total_items?: number;
+          total_units?: number;
+          total_cost_amount?: number;
+          notes?: string | null;
+          payment_status?: 'PENDING' | 'PAID';
+          due_date?: string | null;
+          create_financial_payable?: boolean;
+          registered_by?: string;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          invoice_number?: string;
+          series?: string | null;
+          access_key?: string | null;
+          issue_date?: string;
+          entry_date?: string;
+          supplier_id?: string | null;
+          supplier_name?: string;
+          supplier_cnpj?: string | null;
+          total_items?: number;
+          total_units?: number;
+          total_cost_amount?: number;
+          notes?: string | null;
+          payment_status?: 'PENDING' | 'PAID';
+          due_date?: string | null;
+          create_financial_payable?: boolean;
+          registered_by?: string;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      stock_inward_items: {
+        Row: {
+          id: string;
+          invoice_id: string;
+          product_id: string | null;
+          product_name: string;
+          sku: string | null;
+          barcode: string | null;
+          category: 'PEÇA' | 'ACESSÓRIO' | 'OUTROS';
+          quantity: number;
+          cost_price: number;
+          current_selling_price: number | null;
+          new_selling_price: number;
+          markup_percentage: number | null;
+          total_cost: number;
+          is_new_product: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          invoice_id: string;
+          product_id?: string | null;
+          product_name: string;
+          sku?: string | null;
+          barcode?: string | null;
+          category?: 'PEÇA' | 'ACESSÓRIO' | 'OUTROS';
+          quantity: number;
+          cost_price: number;
+          current_selling_price?: number | null;
+          new_selling_price: number;
+          markup_percentage?: number | null;
+          total_cost: number;
+          is_new_product?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          invoice_id?: string;
+          product_id?: string | null;
+          product_name?: string;
+          sku?: string | null;
+          barcode?: string | null;
+          category?: 'PEÇA' | 'ACESSÓRIO' | 'OUTROS';
+          quantity?: number;
+          cost_price?: number;
+          current_selling_price?: number | null;
+          new_selling_price?: number;
+          markup_percentage?: number | null;
+          total_cost?: number;
+          is_new_product?: boolean;
+          created_at?: string;
+        };
+      };
+      store_settings: {
+        Row: {
+          id: string;
+          store_name: string;
+          store_subtitle: string | null;
+          logo_url: string | null;
+          cnpj_cpf: string;
+          phone: string;
+          whatsapp: string;
+          email: string;
+          address_street: string;
+          address_number: string;
+          address_neighborhood: string;
+          address_city: string;
+          address_state: string;
+          address_zip: string;
+          receipt_footer_msg: string;
+          warranty_terms: string;
+          default_commission_pct: number;
+          auto_print_receipt: boolean;
+          paper_size: '80mm' | '58mm' | 'A4';
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          store_name?: string;
+          store_subtitle?: string | null;
+          logo_url?: string | null;
+          cnpj_cpf?: string;
+          phone?: string;
+          whatsapp?: string;
+          email?: string;
+          address_street?: string;
+          address_number?: string;
+          address_neighborhood?: string;
+          address_city?: string;
+          address_state?: string;
+          address_zip?: string;
+          receipt_footer_msg?: string;
+          warranty_terms?: string;
+          default_commission_pct?: number;
+          auto_print_receipt?: boolean;
+          paper_size?: '80mm' | '58mm' | 'A4';
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          store_name?: string;
+          store_subtitle?: string | null;
+          logo_url?: string | null;
+          cnpj_cpf?: string;
+          phone?: string;
+          whatsapp?: string;
+          email?: string;
+          address_street?: string;
+          address_number?: string;
+          address_neighborhood?: string;
+          address_city?: string;
+          address_state?: string;
+          address_zip?: string;
+          receipt_footer_msg?: string;
+          warranty_terms?: string;
+          default_commission_pct?: number;
+          auto_print_receipt?: boolean;
+          paper_size?: '80mm' | '58mm' | 'A4';
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+      };
       audit_logs: {
         Row: {
           id: string;
@@ -976,8 +1232,11 @@ export interface Database {
           name: string;
           sku: string | null;
           barcode: string | null;
+          category: string;
+          unit: string;
           sale_price: number;
           current_stock: number;
+          min_stock: number;
           is_active: boolean;
           created_at: string;
           updated_at: string;
