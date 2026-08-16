@@ -21,15 +21,18 @@ import {
   Barcode,
   Sparkles,
   CheckCircle2,
+  Receipt,
 } from 'lucide-react';
 import { Product, Client, User as UserType, Sale, CashRegister } from '../../types';
 import { formatCurrencyBR, formatDateTimeBR } from '../../lib/formatters';
+import { ThermalReceiptModal } from './ThermalReceiptModal';
 
 interface PosModuleProps {
   products: Product[];
   clients: Client[];
   users: UserType[];
   userRole: string;
+  sales?: Sale[];
   onRefreshData: () => void;
   onOpenNewOS: () => void;
 }
@@ -39,6 +42,7 @@ export const PosModule: React.FC<PosModuleProps> = ({
   clients,
   users,
   userRole,
+  sales = [],
   onRefreshData,
   onOpenNewOS,
 }) => {
@@ -61,7 +65,7 @@ export const PosModule: React.FC<PosModuleProps> = ({
 
   // Hidden Container Menu Drawer State (Menu do canto superior direito)
   const [isContainerMenuOpen, setIsContainerMenuOpen] = useState(false);
-  const [activeContainerTab, setActiveContainerTab] = useState<'CAIXA_STATUS' | 'SANGRIA' | 'SUPRIMENTO' | 'QUICK_PROD'>('CAIXA_STATUS');
+  const [activeContainerTab, setActiveContainerTab] = useState<'CAIXA_STATUS' | 'HISTORICO_VENDAS' | 'SANGRIA' | 'SUPRIMENTO' | 'QUICK_PROD'>('CAIXA_STATUS');
 
   // Cash Register State
   const [cashRegister, setCashRegister] = useState<CashRegister | null>(null);
@@ -307,35 +311,7 @@ export const PosModule: React.FC<PosModuleProps> = ({
   }, [amountGiven, total]);
 
   return (
-    <div className="h-[calc(100vh-135px)] min-h-[500px] flex flex-col gap-3 animate-in fade-in duration-150 overflow-hidden">
-      {/* Top Header: Title, Cash Status and Container Menu Button on Right */}
-      <div className="shrink-0 flex items-center justify-between bg-white dark:bg-slate-800 px-5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-sm">
-            <ShoppingBag className="w-4 h-4" />
-          </div>
-          <div>
-            <h1 className="text-sm font-extrabold text-slate-900 dark:text-white leading-none">
-              PDV Frente de Caixa
-            </h1>
-            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-              Caixa Aberto: {formatCurrencyBR(cashRegister?.current_balance || 0)}
-            </span>
-          </div>
-        </div>
-
-        {/* Menu Conteiner no canto superior direito */}
-        <button
-          id="pdv-container-menu-btn"
-          onClick={() => setIsContainerMenuOpen(true)}
-          className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-xl shadow-sm transition-all border border-slate-700 hover:border-slate-500"
-          title="Opções do Caixa e Atalhos"
-        >
-          <Menu className="w-4 h-4 text-emerald-400" />
-          <span>Menu do Caixa</span>
-        </button>
-      </div>
-
+    <div className="h-[calc(100vh-85px)] min-h-[500px] flex flex-col gap-2.5 animate-in fade-in duration-150 overflow-hidden">
       {/* Strict Vertical Split: 50% Left (Busca de Produtos) | 50% Right (Produtos Selecionados / Totais) */}
       <div className="flex-1 flex flex-row gap-3 min-h-0 overflow-hidden">
         
@@ -503,20 +479,35 @@ export const PosModule: React.FC<PosModuleProps> = ({
           
           <div className="flex flex-col min-h-0 flex-1 space-y-2 overflow-hidden">
             <div className="flex items-center justify-between shrink-0">
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Produtos Escolhidos</span>
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-black rounded-full">
-                  {cart.reduce((a, b) => a + b.quantity, 0)} itens
-                </span>
-              </h3>
-              {cart.length > 0 && (
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Produtos Escolhidos</span>
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-black rounded-full">
+                    {cart.reduce((a, b) => a + b.quantity, 0)} itens
+                  </span>
+                </h3>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {cart.length > 0 && (
+                  <button
+                    onClick={clearCart}
+                    className="text-[11px] text-rose-500 hover:text-rose-600 font-bold px-2 py-1"
+                  >
+                    Limpar
+                  </button>
+                )}
+                {/* Botão de Menu Conteiner Discreto no canto superior direito */}
                 <button
-                  onClick={clearCart}
-                  className="text-[11px] text-rose-500 hover:text-rose-600 font-bold"
+                  id="pdv-container-menu-btn"
+                  onClick={() => setIsContainerMenuOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-[11px] font-bold rounded-lg shadow-sm transition-all border border-slate-700 hover:border-slate-500"
+                  title="Opções do Caixa (Sangria, Suprimento, OS, Novo Produto)"
                 >
-                  Limpar Todos
+                  <Menu className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Menu Caixa</span>
                 </button>
-              )}
+              </div>
             </div>
 
             {/* Cabeçalho da Tabela de Itens */}
@@ -687,6 +678,17 @@ export const PosModule: React.FC<PosModuleProps> = ({
                 <span>Fluxo</span>
               </button>
               <button
+                onClick={() => setActiveContainerTab('HISTORICO_VENDAS')}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 font-bold whitespace-nowrap border-b-2 transition-all ${
+                  activeContainerTab === 'HISTORICO_VENDAS'
+                    ? 'border-indigo-600 text-indigo-600 bg-white dark:bg-slate-850'
+                    : 'border-transparent text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>Vendas ({sales.length})</span>
+              </button>
+              <button
                 onClick={() => setActiveContainerTab('SANGRIA')}
                 className={`flex items-center gap-1.5 px-3.5 py-2.5 font-bold whitespace-nowrap border-b-2 transition-all ${
                   activeContainerTab === 'SANGRIA'
@@ -799,6 +801,61 @@ export const PosModule: React.FC<PosModuleProps> = ({
                         </p>
                       )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Aba: Histórico de Vendas & Cupons */}
+              {activeContainerTab === 'HISTORICO_VENDAS' && (
+                <div className="space-y-3">
+                  <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-300 flex items-start gap-2">
+                    <Receipt className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>Clique no ícone de impressora para emitir a 2ª via do cupom (80mm).</span>
+                  </div>
+
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {sales && sales.length > 0 ? (
+                      sales.map((sale, idx) => (
+                        <div
+                          key={`${sale.id || 'sale'}_${sale.sale_number}_${idx}`}
+                          className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between"
+                        >
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-xs text-slate-900 dark:text-white">
+                                Venda #{sale.sale_number}
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.2 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded font-bold">
+                                {sale.payment_method}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              {sale.seller_name} • {formatDateTimeBR(sale.date)}
+                            </p>
+                            <p className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+                              {sale.items.length} {sale.items.length === 1 ? 'item' : 'itens'} — {formatCurrencyBR(sale.total)}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLastCompletedSale(sale);
+                              setIsPrintingReceipt(true);
+                            }}
+                            className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-sm flex items-center gap-1 text-xs font-bold transition-all"
+                            title="Imprimir Cupom 80mm"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Cupom</span>
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-400 italic text-center py-6">
+                        Nenhuma venda registrada ainda no sistema.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -1076,73 +1133,14 @@ export const PosModule: React.FC<PosModuleProps> = ({
         </div>
       )}
 
-      {/* --- CUPOM NÃO FISCAL --- */}
-      {isPrintingReceipt && lastCompletedSale && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white w-full max-w-sm rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-3">
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-slate-700">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Comprovante da Venda
-              </h3>
-              <button
-                onClick={() => setIsPrintingReceipt(false)}
-                className="p-1 rounded text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="font-mono text-[11px] leading-tight space-y-2 p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
-              <div className="text-center pb-1.5 border-b border-slate-300 dark:border-slate-700">
-                <h2 className="font-bold text-xs">DUAL CELL ASSISTÊNCIA</h2>
-                <p className="text-[10px] text-slate-500">Av. Principal, 1000</p>
-              </div>
-
-              <div className="py-1 border-b border-slate-200 dark:border-slate-800 text-[10px]">
-                <p>VENDA: #{lastCompletedSale.sale_number}</p>
-                <p>DATA: {formatDateTimeBR(lastCompletedSale.date)}</p>
-                <p>VENDEDOR: {lastCompletedSale.seller_name}</p>
-              </div>
-
-              <div className="py-1 space-y-1 border-b border-slate-200 dark:border-slate-800">
-                {lastCompletedSale.items.map((item, idx) => (
-                  <div key={idx} className="flex justify-between">
-                    <span>
-                      {item.quantity}x {item.product_name.slice(0, 18)}
-                    </span>
-                    <span>{formatCurrencyBR(item.total)}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="pt-1 text-right space-y-0.5 font-bold">
-                <p className="text-xs font-black text-emerald-600">
-                  TOTAL: {formatCurrencyBR(lastCompletedSale.total)}
-                </p>
-                <p className="text-[10px] font-normal text-slate-400">
-                  Forma: {lastCompletedSale.payment_method}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => window.print()}
-                className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Imprimir Cupom
-              </button>
-              <button
-                onClick={() => setIsPrintingReceipt(false)}
-                className="px-4 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl"
-              >
-                Concluir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* --- POP-UP MODAL DO CUPOM TÉRMICO (80MM) --- */}
+      <ThermalReceiptModal
+        sale={lastCompletedSale}
+        isOpen={isPrintingReceipt && !!lastCompletedSale}
+        onClose={() => setIsPrintingReceipt(false)}
+        client={clients.find((c) => c.id === (lastCompletedSale?.client_id || selectedClientId)) || null}
+        amountGiven={amountGiven ? parseFloat(amountGiven) : null}
+      />
     </div>
   );
 };

@@ -77,6 +77,7 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [sortOrder, setSortOrder] = useState<'OLDEST_FIRST' | 'NEWEST_FIRST' | 'OS_ASC' | 'OS_DESC' | 'PRIORITY'>('OLDEST_FIRST');
+  const [hidePaid, setHidePaid] = useState<boolean>(true); // Pagas somem da lista por padrão
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -196,12 +197,11 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
         }),
       });
 
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao cadastrar cliente');
+        throw new Error(data.error || 'Erro ao cadastrar cliente');
       }
 
-      const data = await res.json();
       onRefresh();
       if (data.client?.id) {
         setClientId(data.client.id);
@@ -356,12 +356,10 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
         body: JSON.stringify(payload),
       });
 
+      const result = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Erro ${res.status}: Falha ao salvar a Ordem de Serviço`);
+        throw new Error(result.error || `Erro ${res.status}: Falha ao salvar a Ordem de Serviço`);
       }
-
-      const result = await res.json();
 
       // Reset form
       setClientId('');
@@ -449,6 +447,13 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
       if (res.ok) {
         setSelectedOrderForPayment(null);
         setPaymentAmount('');
+        const isNowPaid = (selectedOrderForPayment.remaining_amount - amountNum) <= 0;
+        setSuccessToast(
+          isNowPaid
+            ? `Pagamento de R$ ${amountNum.toFixed(2)} registrado! A OS #${selectedOrderForPayment.order_number} foi quitada e ocultada da lista ativa.`
+            : `Recebimento de R$ ${amountNum.toFixed(2)} registrado com sucesso para a OS #${selectedOrderForPayment.order_number}.`
+        );
+        setTimeout(() => setSuccessToast(null), 5000);
         onRefresh();
       }
     } catch (err) {
@@ -458,10 +463,34 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
     }
   };
 
+  // Helper para verificar se a OS foi totalmente paga / quitada
+  const isOrderPaid = (os: ServiceOrder) => {
+    return (
+      os.payment_status === 'PAID' ||
+      os.financial_status === 'PAID' ||
+      (os.total_amount > 0 && (os.remaining_amount <= 0 || os.deposit_amount >= os.total_amount))
+    );
+  };
+
+  // Quantidade de OS pagas
+  const paidOrdersCount = useMemo(() => {
+    return orders.filter((os) => isOrderPaid(os)).length;
+  }, [orders]);
+
+  // Lista base para contagem de abas (se hidePaid=true, contadores refletem apenas as ativas)
+  const activeOrdersForCounts = useMemo(() => {
+    return hidePaid ? orders.filter((os) => !isOrderPaid(os)) : orders;
+  }, [orders, hidePaid]);
+
   // Filter & Sort Orders (Default: OLDEST_FIRST / 1º Cadastrado no Topo)
   const filteredOrders = useMemo(() => {
     return orders
       .filter((os) => {
+        // Se ocultar pagas estiver ativo, esconde as OS quitadas da lista
+        if (hidePaid && isOrderPaid(os)) {
+          return false;
+        }
+
         const matchSearch =
           os.order_number.toString().includes(searchTerm) ||
           os.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -498,12 +527,12 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
         }
         return timeA - timeB;
       });
-  }, [orders, searchTerm, statusFilter, priorityFilter, sortOrder]);
+  }, [orders, searchTerm, statusFilter, priorityFilter, sortOrder, hidePaid]);
 
   // Counts by status
   const countsByStatus = useMemo(() => {
     const map: Record<string, number> = {
-      ALL: orders.length,
+      ALL: activeOrdersForCounts.length,
       OPEN: 0,
       ANALYSIS_BOARD: 0,
       WAITING_PARTS: 0,
@@ -513,11 +542,11 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
       DELIVERED: 0,
       CANCELLED: 0,
     };
-    orders.forEach((os) => {
+    activeOrdersForCounts.forEach((os) => {
       if (map[os.status] !== undefined) map[os.status]++;
     });
     return map;
-  }, [orders]);
+  }, [activeOrdersForCounts]);
 
   // WhatsApp Message Generator
   const generateWhatsAppLink = (os: ServiceOrder) => {
@@ -716,6 +745,36 @@ export const ServiceOrdersModule: React.FC<ServiceOrdersModuleProps> = ({
             <option value="HIGH">Alta</option>
             <option value="URGENT">🚨 Urgente</option>
           </select>
+
+          {/* Toggle para Ocultar / Exibir OS Pagas */}
+          <button
+            type="button"
+            onClick={() => setHidePaid(!hidePaid)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+              hidePaid
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 shadow-sm'
+                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm'
+            }`}
+            title={
+              hidePaid
+                ? 'OS quitadas/pagas estão ocultas da lista. Clique para visualizar todas.'
+                : 'Todas as OS (incluindo pagas) estão sendo exibidas. Clique para ocultar as quitadas.'
+            }
+          >
+            <CheckCheck className={`w-3.5 h-3.5 ${hidePaid ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`} />
+            <span>{hidePaid ? 'Pagas Ocultadas' : 'Mostrando Pagas'}</span>
+            {paidOrdersCount > 0 && (
+              <span
+                className={`px-1.5 py-0.5 text-[10px] font-black rounded-full ${
+                  hidePaid
+                    ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-200'
+                    : 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200'
+                }`}
+              >
+                {paidOrdersCount}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 

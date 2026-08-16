@@ -1,1 +1,58 @@
 @import "tailwindcss";
+
+@layer utilities {
+  /* Print Media Rules */
+  @media print {
+    @page {
+      size: 80mm auto;
+      margin: 0mm;
+    }
+
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+      font-size: 11px !important;
+      width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+
+    /* Hide standard UI elements during print */
+    header, nav, aside, footer, button, .print\\:hidden {
+      display: none !important;
+    }
+
+    /* Print 80mm Thermal Receipt styling */
+    #printable-receipt-80mm {
+      display: block !important;
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 72mm !important;
+      max-width: 72mm !important;
+      margin: 0 auto !important;
+      padding: 2mm 3mm !important;
+      color: #000000 !important;
+      background: #ffffff !important;
+      font-family: 'Courier New', Courier, monospace !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+
+    /* Print A4 Service Order styling (when printing full OS) */
+    #printable-service-order {
+      display: block !important;
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: 8mm !important;
+      color: #000000 !important;
+      background: #ffffff !important;
+    }
+  }
+}

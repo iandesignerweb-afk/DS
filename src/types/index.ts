@@ -143,6 +143,7 @@ export interface ServiceOrder {
   remaining_amount: number;
   payment_method?: string;
   payment_status: 'PENDING' | 'PARTIAL' | 'PAID';
+  financial_status?: string;
   history: ServiceOrderHistory[];
   created_at: string;
   updated_at: string;

@@ -65,7 +65,7 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<UserType>(TEST_USERS.ADMIN);
   const [userRole, setUserRole] = useState<UserRole>('ADMIN');
 
-  const [activeTab, setActiveTab] = useState<NavTab>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<NavTab>('POS');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
@@ -111,39 +111,39 @@ export function App() {
       ]);
 
       if (usersRes.ok) {
-        const d = await usersRes.json();
+        const d = await usersRes.json().catch(() => ({}));
         setUsers(d.users || []);
       }
       if (clientsRes.ok) {
-        const d = await clientsRes.json();
+        const d = await clientsRes.json().catch(() => ({}));
         setClients(d.clients || []);
       }
       if (brandsRes.ok) {
-        const d = await brandsRes.json();
+        const d = await brandsRes.json().catch(() => ({}));
         setBrands(d.brands || []);
       }
       if (modelsRes.ok) {
-        const d = await modelsRes.json();
+        const d = await modelsRes.json().catch(() => ({}));
         setModels(d.models || []);
       }
       if (productsRes.ok) {
-        const d = await productsRes.json();
+        const d = await productsRes.json().catch(() => ({}));
         setProducts(d.products || []);
       }
       if (servicesRes.ok) {
-        const d = await servicesRes.json();
+        const d = await servicesRes.json().catch(() => ({}));
         setServicesList(d.services || []);
       }
       if (suppliersRes.ok) {
-        const d = await suppliersRes.json();
+        const d = await suppliersRes.json().catch(() => ({}));
         setSuppliers(d.suppliers || []);
       }
       if (ordersRes.ok) {
-        const d = await ordersRes.json();
+        const d = await ordersRes.json().catch(() => ({}));
         setOrders(d.orders || d.serviceOrders || []);
       }
       if (salesRes.ok) {
-        const d = await salesRes.json();
+        const d = await salesRes.json().catch(() => ({}));
         setSales(d.sales || []);
       }
     } catch (err) {
@@ -168,7 +168,11 @@ export function App() {
     setCurrentUser(user);
     setUserRole(user.role);
     setIsAuthenticated(true);
-    setActiveTab('DASHBOARD');
+    if (user.role === 'TECHNICIAN') {
+      setActiveTab('ORDERS');
+    } else {
+      setActiveTab('POS');
+    }
   };
 
   const handleLogout = () => {
@@ -179,9 +183,9 @@ export function App() {
     setUserRole(role);
     const targetUser = TEST_USERS[role] || TEST_USERS.ADMIN;
     setCurrentUser(targetUser);
-    // If on a restricted tab, reset to Dashboard
+    // If on a restricted tab, reset to POS or Orders
     if ((role === 'SELLER' || role === 'TECHNICIAN') && (activeTab === 'SUPPLIERS' || activeTab === 'FINANCIAL')) {
-      setActiveTab('DASHBOARD');
+      setActiveTab(role === 'TECHNICIAN' ? 'ORDERS' : 'POS');
     }
   };
 
@@ -198,18 +202,18 @@ export function App() {
   // Determine navigation items visible per role
   const allNavItems = [
     {
-      id: 'DASHBOARD' as NavTab,
-      label: userRole === 'SELLER' ? 'Painel do Vendedor' : userRole === 'TECHNICIAN' ? 'Painel do Laboratório' : 'Painel Geral',
-      icon: LayoutDashboard,
-      roles: ['ADMIN', 'SELLER', 'TECHNICIAN', 'CASHIER'],
-    },
-    {
       id: 'POS' as NavTab,
-      label: 'PDV Balcão & Caixa',
+      label: 'PDV Frente de Caixa',
       icon: ShoppingCart,
       badge: 'Vendas',
       badgeColor: 'bg-emerald-500 text-white',
       roles: ['ADMIN', 'SELLER', 'CASHIER'],
+    },
+    {
+      id: 'DASHBOARD' as NavTab,
+      label: userRole === 'SELLER' ? 'Painel do Vendedor' : userRole === 'TECHNICIAN' ? 'Painel do Laboratório' : 'Painel Geral',
+      icon: LayoutDashboard,
+      roles: ['ADMIN', 'SELLER', 'TECHNICIAN', 'CASHIER'],
     },
     {
       id: 'ORDERS' as NavTab,
@@ -276,7 +280,7 @@ export function App() {
             </button>
 
             <div
-              onClick={() => setActiveTab('DASHBOARD')}
+              onClick={() => setActiveTab(userRole === 'TECHNICIAN' ? 'ORDERS' : 'POS')}
               className="flex items-center gap-2.5 cursor-pointer"
             >
               <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-600/30">
@@ -463,6 +467,7 @@ export function App() {
               clients={clients}
               users={users}
               userRole={userRole}
+              sales={sales}
               onRefreshData={fetchData}
               onOpenNewOS={handleOpenNewOS}
             />

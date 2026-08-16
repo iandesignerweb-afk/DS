@@ -672,7 +672,7 @@ const serviceOrders: ServiceOrder[] = [
   },
 ];
 
-let nextSaleNumber = 501;
+let nextSaleNumber = 502;
 const sales: Sale[] = [
   {
     id: 'sale_501',
@@ -890,6 +890,15 @@ async function startServer() {
     res.status(201).json({ brand: newBrand });
   });
 
+  app.put('/api/brands/:id', (req, res) => {
+    const brand = brands.find((b) => b.id === req.params.id);
+    if (!brand) return res.status(404).json({ error: 'Marca não encontrada.' });
+    const { name, icon } = req.body;
+    if (name) brand.name = name.trim();
+    if (icon) brand.icon = icon;
+    res.json({ brand });
+  });
+
   app.delete('/api/brands/:id', (req, res) => {
     const idx = brands.findIndex((b) => b.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Marca não encontrada.' });
@@ -897,14 +906,18 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.get('/api/models', (req, res) => {
+  // Models (and alias phone-models)
+  const handleGetModels = (req: Request, res: Response) => {
     const { brand_id } = req.query;
     let result = models;
     if (brand_id) {
       result = result.filter((m) => m.brand_id === brand_id);
     }
-    res.json({ models: result });
-  });
+    res.json({ models: result, phoneModels: result });
+  };
+
+  app.get('/api/models', handleGetModels);
+  app.get('/api/phone-models', handleGetModels);
 
   app.post('/api/models', (req, res) => {
     const { brand_id, name, type } = req.body;
@@ -921,6 +934,20 @@ async function startServer() {
     };
     models.push(newModel);
     res.status(201).json({ model: newModel });
+  });
+
+  app.put('/api/models/:id', (req, res) => {
+    const model = models.find((m) => m.id === req.params.id);
+    if (!model) return res.status(404).json({ error: 'Modelo não encontrado.' });
+    const { brand_id, name, type } = req.body;
+    if (brand_id) {
+      model.brand_id = brand_id;
+      const b = brands.find((brand) => brand.id === brand_id);
+      if (b) model.brand_name = b.name;
+    }
+    if (name) model.name = name.trim();
+    if (type) model.type = type;
+    res.json({ model });
   });
 
   app.delete('/api/models/:id', (req, res) => {
@@ -1241,6 +1268,10 @@ async function startServer() {
     };
 
     res.json({ serviceOrders: safeList, orders: safeList, statusCounts });
+  });
+
+  app.get('/api/service-orders/next-number', (_req, res) => {
+    res.json({ next_number: nextOrderNumber, nextNumber: nextOrderNumber });
   });
 
   app.get('/api/service-orders/:id', (req, res) => {
@@ -1713,11 +1744,14 @@ async function startServer() {
     const commissionPercent = seller.commission_percentage || 4.0;
     const commissionAmount = Number(((total * commissionPercent) / 100).toFixed(2));
 
-    const saleNum = nextSaleNumber++;
+    // Ensure highest saleNum
+    const existingMax = sales.reduce((max, s) => Math.max(max, s.sale_number || 0), 500);
+    const saleNum = Math.max(nextSaleNumber, existingMax + 1);
+    nextSaleNumber = saleNum + 1;
     const now = new Date().toISOString();
 
     const newSale: Sale = {
-      id: `sale_${saleNum}`,
+      id: `sale_${Date.now()}_${saleNum}`,
       sale_number: saleNum,
       date: now,
       client_id: client_id || undefined,
@@ -1803,7 +1837,7 @@ async function startServer() {
   });
 
   // 10. Financial Management (ADMIN ONLY)
-  app.get('/api/financial/dashboard', requireAdmin, (_req, res) => {
+  const handleFinancialDashboard = (_req: Request, res: Response) => {
     // Totals calculations
     const totalOSRevenue = serviceOrders
       .filter((os) => os.status !== 'CANCELLED')
@@ -1889,6 +1923,13 @@ async function startServer() {
       sellerCommissions: Object.values(commissionBySeller),
       accounts: financialAccounts,
     });
+  };
+
+  app.get('/api/financial/dashboard', requireAdmin, handleFinancialDashboard);
+  app.get('/api/financial/summary', requireAdmin, handleFinancialDashboard);
+
+  app.get('/api/financial/accounts', requireAdmin, (_req, res) => {
+    res.json({ accounts: financialAccounts });
   });
 
   app.post('/api/financial/accounts', requireAdmin, (req, res) => {
@@ -1913,6 +1954,21 @@ async function startServer() {
     res.status(201).json({ account: newAccount });
   });
 
+  app.patch('/api/financial/accounts/:id/status', requireAdmin, (req, res) => {
+    const acc = financialAccounts.find((a) => a.id === req.params.id);
+    if (!acc) return res.status(404).json({ error: 'Conta não encontrada.' });
+
+    const { status } = req.body;
+    if (status === 'PAID') {
+      acc.status = 'PAID';
+      acc.payment_date = new Date().toISOString().split('T')[0];
+    } else {
+      acc.status = 'PENDING';
+      acc.payment_date = undefined;
+    }
+    res.json({ account: acc });
+  });
+
   app.put('/api/financial/accounts/:id/pay', requireAdmin, (req, res) => {
     const acc = financialAccounts.find((a) => a.id === req.params.id);
     if (!acc) return res.status(404).json({ error: 'Conta não encontrada.' });
@@ -1927,6 +1983,14 @@ async function startServer() {
     if (idx === -1) return res.status(404).json({ error: 'Conta não encontrada.' });
     financialAccounts.splice(idx, 1);
     res.json({ success: true });
+  });
+
+  // Strict API 404 handler - prevents HTML index.html fallback for broken /api/ requests
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({
+      error: `Endpoint não encontrado: ${req.method} ${req.originalUrl}`,
+      code: 'API_ENDPOINT_NOT_FOUND',
+    });
   });
 
   // --- Vite Middleware ---

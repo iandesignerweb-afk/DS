@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Wrench,
   ShoppingCart,
@@ -19,9 +19,11 @@ import {
   Award,
   Sparkles,
   Calendar,
+  Printer,
 } from 'lucide-react';
 import { ServiceOrder, Sale, Product, STATUS_CONFIG, UserRole } from '../../types';
 import { formatCurrencyBR, formatDateTimeBR } from '../../lib/formatters';
+import { ThermalReceiptModal } from '../pos/ThermalReceiptModal';
 
 interface DashboardModuleProps {
   orders: ServiceOrder[];
@@ -40,6 +42,8 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
   onNavigate,
   onOpenNewOS,
 }) => {
+  const [selectedSaleForReceipt, setSelectedSaleForReceipt] = useState<Sale | null>(null);
+
   const countAnalysisBoard = orders.filter((o) => o.status === 'ANALYSIS_BOARD').length;
   const countWaitingParts = orders.filter((o) => o.status === 'WAITING_PARTS').length;
   const countInProgress = orders.filter((o) => o.status === 'IN_PROGRESS').length;
@@ -359,9 +363,9 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
               </div>
 
               <div className="space-y-2">
-                {sales.slice(0, 4).map((sale) => (
+                {sales.slice(0, 4).map((sale, idx) => (
                   <div
-                    key={sale.id}
+                    key={`${sale.id || 'sale'}_${sale.sale_number}_${idx}`}
                     className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl flex items-center justify-between text-xs"
                   >
                     <div>
@@ -372,9 +376,19 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
                         {sale.seller_name} • {sale.items.length} itens ({sale.payment_method})
                       </p>
                     </div>
-                    <span className="font-black text-emerald-600 dark:text-emerald-400">
-                      {formatCurrencyBR(sale.total)}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-emerald-600 dark:text-emerald-400">
+                        {formatCurrencyBR(sale.total)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSaleForReceipt(sale)}
+                        className="p-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-indigo-600 hover:text-white text-slate-700 dark:text-slate-300 rounded-lg transition-colors"
+                        title="Imprimir Cupom 80mm"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -458,6 +472,13 @@ export const DashboardModule: React.FC<DashboardModuleProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Pop-up do Cupom Térmico (80mm) */}
+      <ThermalReceiptModal
+        sale={selectedSaleForReceipt}
+        isOpen={!!selectedSaleForReceipt}
+        onClose={() => setSelectedSaleForReceipt(null)}
+      />
     </div>
   );
 };
